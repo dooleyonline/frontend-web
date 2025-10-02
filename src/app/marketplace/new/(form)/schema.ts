@@ -17,9 +17,6 @@ const imageSchema = z
         "image/svg+xml",
         "image/heic",
         "image/heif",
-        // ...(file.name.toLowerCase().endsWith(".heic")
-        //   ? ["application/octet-stream"]
-        //   : []),
       ];
       return validTypes.includes(file.type);
     },

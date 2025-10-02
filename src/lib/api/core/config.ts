@@ -1,10 +1,10 @@
 export const ENDPOINTS = {
   AUTH: {
-    SIGN_IN: "/auth/login/",
-    SIGN_UP: "/auth/register/",
-    SIGN_OUT: "/auth/logout/",
-    REFRESH: "/auth/login/refresh/",
-    ME: "/auth/me/",
+    SIGN_IN: "/users/login/",
+    SIGN_UP: "/users/register/",
+    SIGN_OUT: "/users/logout/",
+    REFRESH: "/users/login/refresh/",
+    ME: "/users/me/",
   },
   MARKETPLACE: {
     CATEGORIES: "/marketplace/categories/",

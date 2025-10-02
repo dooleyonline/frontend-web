@@ -7,7 +7,7 @@ import { ApiResponse, ENDPOINTS } from "../core";
 import { apiFetch } from "../core/client";
 import { User } from "./types";
 
-export const performTokenRefresh = () => {
+const performTokenRefresh = () => {
   return axios.post<{ access: string }>(
     `${env.API_BASE_URL}${ENDPOINTS.AUTH.REFRESH}`,
     undefined,
@@ -61,4 +61,4 @@ const authApi = {
   },
 };
 
-export { authApi, type User };
+export { authApi, performTokenRefresh, type User };

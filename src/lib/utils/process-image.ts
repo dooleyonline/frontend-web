@@ -1,5 +1,4 @@
 export default async function processImage(file: File) {
-  console.log("Processing image:", file.name);
   if (
     file.type === "image/heic" ||
     (file.type === "application/octet-stream" &&
@@ -19,7 +18,6 @@ export default async function processImage(file: File) {
       // Create a new file from the blob
       const blob = Array.isArray(jpegBlob) ? jpegBlob[0] : jpegBlob;
 
-      console.log("Converted HEIC to JPEG:", blob.size, "bytes");
       return new File([blob], file.name.replace(/\.heic$/i, ".jpg"), {
         type: "image/jpeg",
       });
@@ -29,6 +27,5 @@ export default async function processImage(file: File) {
     }
   }
 
-  // Return original file if not HEIC
   return file;
 }

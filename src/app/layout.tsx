@@ -32,7 +32,6 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${fontVariables} font-sans antialiased h-svh`}>
         <Providers>
-          <Sidebar variant="inset" />
           <SidebarInset className="@container">
             <SiteNavbar />
             <Toaster />
