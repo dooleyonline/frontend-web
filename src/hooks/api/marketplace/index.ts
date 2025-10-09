@@ -1,4 +1,4 @@
 import useCategories from "./use-categories";
-import useItems from "./use-items";
+import useItem from "./use-items";
 
-export { useItems, useCategories };
+export { useItem as useItems, useCategories };

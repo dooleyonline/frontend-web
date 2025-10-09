@@ -9,8 +9,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import type { MarketplaceItem } from "@/lib/api/marketplace/types";
-import getImageURL from "@/lib/utils/get-image-url";
+import type { Item } from "@/lib/types";
 import { motion } from "motion/react";
 import Image from "next/image";
 import { memo, useEffect, useState } from "react";
@@ -18,7 +17,7 @@ import { memo, useEffect, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 
 type ItemCarouselProps = {
-  item: MarketplaceItem | null | undefined;
+  item: Item | null | undefined;
   isLoading?: boolean;
   isPreview?: boolean;
 };
@@ -65,7 +64,7 @@ const ItemCarousel = memo((props: ItemCarouselProps) => {
                 className="rounded-lg overflow-hidden border"
               >
                 <Image
-                  src={isPreview ? image : getImageURL(image)}
+                  src={image}
                   alt={item!.name}
                   fill
                   quality={60}

@@ -2,43 +2,41 @@
 
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/ui";
-import { useNav } from "@/hooks/ui";
-import slugToTitle from "@/lib/utils/slug-to-title";
 import { ArrowRightIcon, ChevronLeftIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { memo, useEffect, useState } from "react";
+
+import GridDistortion from "./ui/grid-distortion";
 
 const SiteHeader = () => {
   const [status, setStatus] = useState<"disabled" | "collapsed" | "expanded">(
-    "disabled"
+    "expanded"
   );
   const isMobile = useIsMobile();
-  const { paths, currentPage, isMainPage, pages } = useNav();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   useEffect(() => {
     setStatus((prev) => {
-      if (paths.includes("profile")) {
-        return "disabled";
-      } else if (isMainPage && searchParams.size === 0) {
-        return "expanded";
-      } else {
-        if (prev === "expanded" && paths.includes("item")) {
-          // case when on main page and item modal is open, do nothing
-          return "expanded";
-        } else {
-          return "collapsed";
-        }
+      switch (pathname.split("/")[0]) {
+        case "":
+          if (searchParams.size === 0) return "expanded";
+          else return "collapsed";
+        case "item":
+          if (prev === "expanded") return "expanded";
+          else return "collapsed";
+        default:
+          return prev;
       }
     });
-  }, [isMainPage, paths, searchParams.size, status]);
+  }, [pathname, searchParams.size, status]);
 
   if (status === "disabled") return null;
 
   return (
     <motion.header
-      animate={
+      style={
         status === "expanded"
           ? isMobile
             ? {
@@ -58,125 +56,140 @@ const SiteHeader = () => {
             }
       }
       transition={{ ease: "anticipate" }}
-      className="border-b px-4 sm:px-6 rounded-b-4xl w-full relative"
+      className="border-b px-4 sm:px-6 rounded-b-4xl w-full relative overflow-hidden"
     >
       <AnimatePresence>
         {status === "expanded" && (
-          <motion.h1
-            initial={{ opacity: 0, height: "0" }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: "0" }}
-            className="font-display block overflow-hidden leading-relaxed"
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.5 }}
+            exit={{ opacity: 0 }}
+            className="absolute left-0 top-0 size-full"
           >
-            {slugToTitle(currentPage)}
+            <GridDistortion
+              imageSrc="/images/banner.png"
+              grid={10}
+              mouse={0.1}
+              strength={0.5}
+              relaxation={0.9}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {status === "expanded" && (
+          <motion.h1
+            // initial={{ opacity: 0, height: "0", paddingBottom: 0 }}
+            animate={{ opacity: 1, height: "auto", paddingBottom: 16 }}
+            exit={{ opacity: 0, height: "0", paddingBottom: 0 }}
+            className="font-display block overflow-hidden leading-none relative z-10 pb-4"
+          >
+            Welcome to DooleyOnline
           </motion.h1>
         )}
       </AnimatePresence>
 
       <SearchBar
         status={status}
-        mainPage={currentPage}
-        pages={pages}
         searchParams={searchParams}
         searchPlaceholder="Search for anything ..."
+        className="relative z-10"
       />
     </motion.header>
   );
 };
 
-type SiteSearchBarProps = {
+type SearchBarProps = {
   status: "disabled" | "collapsed" | "expanded";
-  mainPage: string;
   searchPlaceholder: string;
-  pages: string[];
   searchParams: URLSearchParams;
   className?: string;
 };
 
-function parseInput(input: string) {
+const parseInput = (input: string) => {
   let q = input.trim();
   const category = q.match(/#\w+/g)?.[0];
   if (category) {
     q = q.replace(category, "").trim();
   }
 
-  const qURI = q.length > 0 ? `q=${encodeURIComponent(q)}` : "";
-  const categoryURI = category
-    ? `&category=${encodeURIComponent(category.replace("#", ""))}`
-    : "";
+  const params = new URLSearchParams();
+  if (!!q) params.set("q", q);
+  if (!!category) params.set("category", category.replace("#", ""));
 
-  return { qURI, categoryURI };
-}
+  return params.toString();
+};
 
-const SearchBar = memo((props: SiteSearchBarProps) => {
-  const { searchPlaceholder, status, mainPage, className, searchParams } =
-    props;
-  const router = useRouter();
+const SearchBar = memo(
+  ({ searchPlaceholder, status, className, searchParams }: SearchBarProps) => {
+    const router = useRouter();
 
-  const q = searchParams.get("q");
-  const category = searchParams.get("category");
-  const [input, setInput] = useState("");
+    const q = searchParams.get("q");
+    const category = searchParams.get("category");
+    const [input, setInput] = useState("");
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const { qURI, categoryURI } = parseInput(input);
-    router.push(`/${mainPage}?${qURI}${categoryURI}`);
-  };
+    const handleSearch = (e: React.FormEvent) => {
+      e.preventDefault();
+      const url = parseInput(input);
+      router.push("/?" + url);
+    };
 
-  const handleBack = () => {
-    setInput("");
-    router.back();
-  };
+    const handleBack = () => {
+      setInput("");
+      router.back();
+    };
 
-  useEffect(() => {
-    setInput(`${category ? `#${category}` : ""}${q ? ` ${q}` : ""}`);
-  }, [q, category]);
+    useEffect(() => {
+      setInput(`${category ? `#${category}` : ""}${q ? ` ${q}` : ""}`);
+    }, [q, category]);
 
-  return (
-    <div className={`${className || ""} flex items-center w-full`}>
-      <AnimatePresence>
-        {status === "collapsed" && (
-          <motion.div
-            key="modal"
-            initial={{ width: "0px", marginRight: "0px" }}
-            animate={{ width: "auto", marginRight: "8px" }}
-            exit={{ width: "0px", marginRight: "0px" }}
-            className="overflow-hidden"
-          >
-            <Button asChild onClick={handleBack} variant="ghost" size="icon">
-              <ChevronLeftIcon className="text-muted-foreground !size-8 sm:!size-9 cursor-pointer" />
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    return (
+      <div className={`${className ?? ""} flex items-center w-full`}>
+        <AnimatePresence>
+          {status === "collapsed" && (
+            <motion.div
+              key="modal"
+              initial={{ width: "0px", marginRight: "0px" }}
+              animate={{ width: "auto", marginRight: "8px" }}
+              exit={{ width: "0px", marginRight: "0px" }}
+              className="overflow-hidden"
+            >
+              <Button asChild onClick={handleBack} variant="ghost" size="icon">
+                <ChevronLeftIcon className="text-muted-foreground !size-8 sm:!size-9 cursor-pointer" />
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      <form
-        onSubmit={handleSearch}
-        id="search-bar"
-        className="flex items-center gap-2 bg-sidebar rounded-full p-1 sm:p-2 border flex-1 !pl-4 sm:!pl-5"
-      >
-        <input
-          id="search-input"
-          type="text"
-          placeholder={searchPlaceholder}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          aria-label="Search"
-          className="w-full bg-transparent outline-hidden placeholder:text-muted-foreground"
-        />
-        <Button
-          variant="outline"
-          size="icon"
-          type="submit"
-          disabled={input.trim().length === 0}
-          className="rounded-full flex-none"
+        <form
+          onSubmit={handleSearch}
+          id="search-bar"
+          className="flex items-center gap-2 bg-sidebar rounded-full p-1 sm:p-2 border flex-1 !pl-4 sm:!pl-5"
         >
-          <ArrowRightIcon />
-        </Button>
-      </form>
-    </div>
-  );
-});
+          <input
+            id="search-input"
+            type="text"
+            placeholder={searchPlaceholder}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            aria-label="Search"
+            className="w-full bg-transparent outline-hidden placeholder:text-muted-foreground"
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            type="submit"
+            disabled={input.trim().length === 0}
+            className="rounded-full flex-none"
+          >
+            <ArrowRightIcon />
+          </Button>
+        </form>
+      </div>
+    );
+  }
+);
 SearchBar.displayName = "SearchBar";
 
 export default SiteHeader;

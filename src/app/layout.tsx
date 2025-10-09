@@ -1,9 +1,11 @@
 import { fonts } from "@/components/fonts";
+import Providers from "@/components/providers";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { SiteNavbar } from "@/components/site-navbar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarInset } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import type { Metadata, Viewport } from "next";
+import { ReactNode } from "react";
 
 import "./globals.css";
 
@@ -22,23 +24,25 @@ const fontVariables = Object.entries(fonts)
   .map(([, v]) => v.variable)
   .join(" ");
 
-export default function RootLayout({
+const RootLayout = ({
   children,
 }: Readonly<{
-  children: React.ReactNode;
-}>) {
+  children: ReactNode;
+}>) => {
   return (
     <html lang="en">
       <body className={`${fontVariables} font-sans antialiased h-svh`}>
-        <SidebarProvider>
+        <Providers>
           <AppSidebar variant="inset" />
           <SidebarInset className="@container">
             <SiteNavbar />
             <Toaster />
             {children}
           </SidebarInset>
-        </SidebarProvider>
+        </Providers>
       </body>
     </html>
   );
-}
+};
+
+export default RootLayout;

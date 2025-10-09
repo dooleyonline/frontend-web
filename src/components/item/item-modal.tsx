@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MarketplaceItem } from "@/lib/api/marketplace";
+import { Item } from "@/lib/types";
 import { cn, formatPrice } from "@/lib/utils";
 import getRelativeTime from "@/lib/utils/get-relative-time";
 import { HeartIcon } from "lucide-react";
@@ -24,7 +24,7 @@ import { memo } from "react";
 import { Skeleton } from "../ui/skeleton";
 
 type ItemModalProps = {
-  item: MarketplaceItem | undefined;
+  item?: Item;
   isLoading?: boolean;
   error?: unknown;
   isPreview?: boolean;
@@ -36,7 +36,7 @@ export const ItemModal = memo((props: ItemModalProps) => {
 
   if (error) console.error("Error loading item:", error);
 
-  const relativeTime = item ? getRelativeTime(item.postedAt) : "";
+  const relativeTime = item?.postedAt ? getRelativeTime(item.postedAt) : "";
 
   return (
     <Card className={cn("h-full shadow-none border-none p-0", className)}>
@@ -133,5 +133,3 @@ export const ItemModal = memo((props: ItemModalProps) => {
   );
 });
 ItemModal.displayName = "ItemModal";
-
-export default ItemModal;

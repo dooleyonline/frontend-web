@@ -14,8 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import {
   BellIcon,
-  GlobeIcon,
-  HomeIcon,
+  MessageCircleIcon,
   SettingsIcon,
   ShoppingBasketIcon,
 } from "lucide-react";
@@ -25,25 +24,20 @@ import * as React from "react";
 
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
+    name: "Ethan Lee",
+    email: "ethan.lee@emory.edu",
     avatar: "https://github.com/shadcn.png",
   },
   navMain: [
     {
-      title: "Marketplace",
-      url: "/marketplace",
+      title: "Browse",
+      url: "/",
       icon: ShoppingBasketIcon,
     },
     {
-      title: "Living",
-      url: "/living",
-      icon: HomeIcon,
-    },
-    {
-      title: "Forum",
-      url: "/forum",
-      icon: GlobeIcon,
+      title: "Chat",
+      url: "/chat",
+      icon: MessageCircleIcon,
     },
   ],
   navSecondary: [

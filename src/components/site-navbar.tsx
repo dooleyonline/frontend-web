@@ -31,17 +31,30 @@ export function SiteNavbar() {
   const isMobile = useIsMobile();
   const { paths, navData } = useNav();
 
-  const isLinkVisible = navData?.links.length > 0 || false;
-  const isButtonVisible = navData?.button.href !== "" || false;
+  const isLinkVisible = true; //navData?.links.length > 0 || false;
+  const isButtonVisible = true; //navData?.button.href !== "" || false;
 
-  if (!navData) {
-    return null;
-  }
+  // if (!navData) {
+  //   return null;
+  // }
+  //
+  const links = [
+    {
+      href: "/profile/saved",
+      title: "Saved Items",
+      description: "View items I've saved for later",
+    },
+    {
+      href: "/profile/listing",
+      title: "My Listing",
+      description: "Edit and track items I've listed for sale",
+    },
+  ];
 
   const user = {
     fName: "John",
     lName: "Doe",
-    id: "shadcn",
+    id: "ethan",
     avatar: "https://github.com/shadcn.png",
     summary: [
       { key: "Saved", val: 32 },
@@ -54,27 +67,23 @@ export function SiteNavbar() {
       <div className="w-fit p-2">
         {isMobile && <SidebarTrigger className="-ml-1 text-foreground" />}
 
-        {paths.length > 1 && (
-          <Breadcrumb className="hidden md:block">
-            <BreadcrumbList>
-              {paths.slice(0, -1).map((p, i) => (
-                <Fragment key={i}>
-                  <BreadcrumbItem>
-                    <BreadcrumbLink href={"/" + p}>
-                      {slugToTitle(p)}
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  {i < paths.length - 1 && <BreadcrumbSeparator />}
-                </Fragment>
-              ))}
-              <BreadcrumbItem>
-                <BreadcrumbPage>
-                  {slugToTitle(paths.slice(-1)[0])}
-                </BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        )}
+        <Breadcrumb className="hidden md:block">
+          <BreadcrumbList>
+            {paths.slice(0, -1).map((p, i) => (
+              <Fragment key={i}>
+                <BreadcrumbItem>
+                  <BreadcrumbLink href={"/" + p}>
+                    {slugToTitle(p)}
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                {i < paths.length - 1 && <BreadcrumbSeparator />}
+              </Fragment>
+            ))}
+            <BreadcrumbItem>
+              <BreadcrumbPage>{slugToTitle(paths.slice(-1)[0])}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
       </div>
 
       <NavigationMenu
@@ -82,65 +91,61 @@ export function SiteNavbar() {
         className="max-w-[320px] md:max-w-[420px] lg:max-w-[520px] flex-1 justify-end"
       >
         <NavigationMenuList>
-          {isLinkVisible && (
-            <NavigationMenuItem>
-              <NavigationMenuTrigger>
-                <Link href={navData.profile}>
-                  <UserIcon size={24} />
-                </Link>
-              </NavigationMenuTrigger>
-              <NavigationMenuContent>
-                <ul className="grid gap-1 w-[300px] md:w-[400px] lg:w-[500px] lg:grid-cols-[.75fr_1fr]">
-                  <li className="row-span-3">
-                    <NavigationMenuLink asChild>
-                      <Link
-                        className="flex h-full w-full select-none flex-col justify-end rounded-md bg-muted p-6 hover:bg-muted/70"
-                        href={navData.profile}
-                      >
-                        <Avatar>
-                          <AvatarImage src={user.avatar} alt="User avatar" />
-                          <AvatarFallback>
-                            {(user.fName + user.lName).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="mb-1 mt-4 text-lg font-medium">
-                          {user.id}
-                        </div>
-                        <ul>
-                          {user.summary.map((e, i) => (
-                            <li
-                              key={i}
-                              className="text-sm leading-tight flex justify-between"
-                            >
-                              <span className="text-muted-foreground">
-                                {e.key}
-                              </span>
-                              <span>{e.val}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </Link>
-                    </NavigationMenuLink>
-                  </li>
-                  {navData.links.map((link, i) => (
-                    <ListItem key={i} href={link.href} title={link.title}>
-                      {link.description}
-                    </ListItem>
-                  ))}
-                </ul>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
-          )}
-          {isButtonVisible && (
-            <NavigationMenuItem>
-              <Button asChild variant={"default"}>
-                <Link href={navData.button.href} passHref>
-                  <PlusIcon size={16} />
-                  {navData.button.text}
-                </Link>
-              </Button>
-            </NavigationMenuItem>
-          )}
+          <NavigationMenuItem>
+            <NavigationMenuTrigger>
+              <Link href="/profile">
+                <UserIcon size={24} />
+              </Link>
+            </NavigationMenuTrigger>
+            <NavigationMenuContent>
+              <ul className="grid gap-1 w-[300px] md:w-[400px] lg:w-[500px] lg:grid-cols-[.75fr_1fr]">
+                <li className="row-span-3">
+                  <NavigationMenuLink asChild>
+                    <Link
+                      className="flex h-full w-full select-none flex-col justify-end rounded-md bg-muted p-6 hover:bg-muted/70"
+                      href="/profile"
+                    >
+                      <Avatar>
+                        <AvatarImage src={user.avatar} alt="User avatar" />
+                        <AvatarFallback>
+                          {(user.fName + user.lName).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="mb-1 mt-4 text-lg font-medium">
+                        {user.id}
+                      </div>
+                      <ul>
+                        {user.summary.map((e, i) => (
+                          <li
+                            key={i}
+                            className="text-sm leading-tight flex justify-between"
+                          >
+                            <span className="text-muted-foreground">
+                              {e.key}
+                            </span>
+                            <span>{e.val}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </Link>
+                  </NavigationMenuLink>
+                </li>
+                {links.map((link, i) => (
+                  <ListItem key={i} href={link.href} title={link.title}>
+                    {link.description}
+                  </ListItem>
+                ))}
+              </ul>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <Button asChild variant={"default"}>
+              <Link href="/new" passHref>
+                <PlusIcon size={16} />
+                Sell My Item
+              </Link>
+            </Button>
+          </NavigationMenuItem>
         </NavigationMenuList>
       </NavigationMenu>
     </nav>

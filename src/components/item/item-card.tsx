@@ -22,10 +22,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/ui";
-import type { MarketplaceItem } from "@/lib/api/marketplace/types";
-import { formatPrice } from "@/lib/utils";
-import getImageURL from "@/lib/utils/get-image-url";
-import getRelativeTime from "@/lib/utils/get-relative-time";
+import type { Item } from "@/lib/types";
+import { formatPrice, getRelativeTime } from "@/lib/utils";
 import { HeartIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -35,14 +33,14 @@ import { memo } from "react";
 import { ItemConditionBadge, ItemNegotiableBadge } from "./item-badge";
 
 type ItemCardProps = {
-  item: MarketplaceItem;
+  item: Item;
   index: number;
 };
 
 const ItemCard = memo(({ item, index }: ItemCardProps) => {
   const searchParams = useSearchParams();
   const relativeTime = getRelativeTime(item.postedAt);
-  const link = `/marketplace/item/${item.id}?${searchParams.toString()}`;
+  const link = `/item/${item.id}?${searchParams.toString()}`;
   const isMobile = useIsMobile();
   const router = useRouter();
 
@@ -58,7 +56,7 @@ const ItemCard = memo(({ item, index }: ItemCardProps) => {
 
   const thumbnail = (
     <Image
-      src={getImageURL(item.images?.[0])}
+      src={item.images?.[0] ?? "/images/fallback.png"}
       alt={item.name}
       quality={40}
       fill

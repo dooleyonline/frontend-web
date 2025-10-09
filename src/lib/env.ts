@@ -1,8 +1,9 @@
-export const CLOUDFRONT_DISTRIBUTION_DOMAIN_NAME =
-  process.env.NEXT_PUBLIC_CLOUDFRONT_DISTRIBUTION_DOMAIN_NAME;
-
-if (!CLOUDFRONT_DISTRIBUTION_DOMAIN_NAME) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_CLOUDFRONT_DISTRIBUTION_DOMAIN_NAME in environment variables"
-  );
-}
+export const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!;
+if (!BASE_URL)
+  throw new Error("environment variable NEXT_PUBLIC_BASE_URL is required");
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL!;
+if (!API_BASE_URL)
+  throw new Error("environment variable NEXT_PUBLIC_API_BASE_URL is required");
+export const STORAGE_URL = process.env.NEXT_PUBLIC_STORAGE_URL!;
+if (!STORAGE_URL)
+  throw new Error("environment variable NEXT_PUBLIC_STORAGE_URL is required");

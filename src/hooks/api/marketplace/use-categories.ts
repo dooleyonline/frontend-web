@@ -1,6 +1,6 @@
 import { categoriesApi } from "@/lib/api/marketplace";
 import type {
-  MarketplaceItemCategory,
+  Category,
   MarketplaceItemCategoryQueryParams,
 } from "@/lib/api/marketplace/types";
 import createQueryString from "@/lib/utils/create-query-string";
@@ -41,7 +41,7 @@ export default function useCategories(
         // Retry after 5 seconds
         setTimeout(() => revalidate({ retryCount }), 5000);
       },
-      fallbackData: [] as MarketplaceItemCategory[],
+      fallbackData: [] as Category[],
     }
   );
 }
