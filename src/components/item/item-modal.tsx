@@ -109,7 +109,7 @@ export const ItemModal = memo((props: ItemModalProps) => {
               <Skeleton className="h-4 w-32" />
             ) : (
               <div>
-                <span className="mr-2 inline-block">{item.seller}</span>
+                <span className="mr-2 inline-block">Ethan Lee</span>
                 <small className="text-muted-foreground">
                   {relativeTime} · {item.views} views
                 </small>
