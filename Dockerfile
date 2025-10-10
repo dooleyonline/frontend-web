@@ -11,12 +11,12 @@ WORKDIR /app
 FROM base AS deps
 RUN pnpm install --prod --frozen-lockfile
 
-FROM base AS build
+FROM base AS builder
 RUN pnpm install --frozen-lockfile
 RUN pnpm run build
 
 FROM base AS runner
 COPY --from=deps /app/node_modules /app/node_modules
-COPY --from=build /app/.next /app/.next
+COPY --from=builder /app/.next /app/.next
 EXPOSE 3000
 CMD [ "pnpm", "start" ]
