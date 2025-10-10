@@ -1,6 +1,0 @@
-steps:
-  - name: "gcr.io/cloud-builders/docker"
-    args: ["build", "-t", "gcr.io/dooleyonline/frontend-web", "."]
-    env:
-      - "NEXT_PUBLIC_BASE_URL=dooleyonline.net"
-images: ["gcr.io/dooleyonline/frontend-web"]
