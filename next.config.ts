@@ -1,19 +1,18 @@
+import { STORAGE_URL } from "@/lib/env";
 import type { NextConfig } from "next";
 
-const STORAGE_HOSTNAME = process.env.STORAGE_HOSTNAME;
+const storageURL = new URL(STORAGE_URL);
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  output: "standalone",
   images: {
-    remotePatterns: STORAGE_HOSTNAME
-      ? [
-          {
-            protocol: "https",
-            hostname: STORAGE_HOSTNAME,
-            pathname: "/**",
-          },
-        ]
-      : [],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: storageURL.host,
+        pathname: "/**",
+      },
+    ],
     imageSizes: [16, 32, 48, 64],
     deviceSizes: [
       16, 32, 48, 64, 96, 128, 256, 384, 512, 640, 750, 828, 1080, 1200, 1920,
