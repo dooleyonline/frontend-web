@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { ReactNode } from "react";
+import { ReactNode, Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Marketplace @ dooleyonline",
@@ -16,7 +16,7 @@ const MarketplaceLayout = ({
   return (
     <>
       {/* Doesn't need fallback since header is hidden until mounted */}
-      {gallery}
+      <Suspense>{gallery}</Suspense>
       {itemDialog}
     </>
   );
