@@ -1,14 +1,39 @@
 steps:
   - name: "gcr.io/cloud-builders/docker"
+    id: Build
     args:
       - "build"
       - "-t"
-      - "gcr.io/dooleyonline/frontend-web"
+      - "gcr.io/$PROJECT_ID/frontend-web:$COMMIT_SHA"
       - "."
       - "--build-arg"
-      - "NEXT_PUBLIC_BASE_URL='https://dooleyonline.net'"
+      - "NEXT_PUBLIC_BASE_URL=${_NEXT_PUBLIC_BASE_URL}"
       - "--build-arg"
-      - "NEXT_PUBLIC_API_BASE_URL='https://api.dooleyonline.net'"
+      - "NEXT_PUBLIC_API_BASE_URL=${_NEXT_PUBLIC_API_BASE_URL}"
       - "--build-arg"
-      - "NEXT_PUBLIC_STORAGE_URL='https://brbqduswpnlcafksjsjo.supabase.co/storage/v1/object/public'"
-images: ["gcr.io/dooleyonline/frontend-web"]
+      - "NEXT_PUBLIC_STORAGE_URL=${_NEXT_PUBLIC_STORAGE_URL}"
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: Push
+    args: ["push", "gcr.io/$PROJECT_ID/frontend-web:$COMMIT_SHA"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: Deploy
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "services"
+      - "update"
+      - "frontend"
+      - "--image=gcr.io/$PROJECT_ID/frontend-web:$COMMIT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+
+images: ["gcr.io/$PROJECT_ID/frontend-web:$COMMIT_SHA"]
+
+substitutions:
+  _REGION: "us-east4"
+  _NEXT_PUBLIC_BASE_URL: "https://dooleyonline.net"
+  _NEXT_PUBLIC_API_BASE_URL: "https://api.dooleyonline.net"
+  _NEXT_PUBLIC_STORAGE_URL: "https://brbqduswpnlcafksjsjo.supabase.co/storage/v1/object/public"
