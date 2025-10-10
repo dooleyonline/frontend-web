@@ -1,5 +1,3 @@
-"use client";
-
-export default function Marketplace() {
+export default function Main() {
   return null;
 }

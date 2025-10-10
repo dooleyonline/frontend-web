@@ -1,16 +1,10 @@
 "use client";
 
-import { NavMain } from "@/components/sidebar/nav-main";
-import { NavSecondary } from "@/components/sidebar/nav-secondary";
-import { NavUser } from "@/components/sidebar/nav-user";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import {
   BellIcon,
@@ -19,8 +13,11 @@ import {
   ShoppingBasketIcon,
 } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import * as React from "react";
+
+import { NavMain } from "./nav-main";
+import { NavSecondary } from "./nav-secondary";
+import { NavUser } from "./nav-user";
 
 const data = {
   user: {
@@ -58,21 +55,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader className="mb-4">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
-            >
-              <Link href="/">
-                <Image src="/logo.svg" alt="logo" width={32} height={32} />
-                <span className={`font-logo text-base font-medium`}>
-                  dooleyonline
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-2 pointer-events-none">
+          <Image src="/logo.svg" alt="logo" width={32} height={32} />
+          <span className={`font-logo text-base font-medium`}>
+            dooleyonline
+          </span>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />

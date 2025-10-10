@@ -17,11 +17,12 @@ import {
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { useIsMobile, useNav } from "@/hooks/ui";
+import { useIsMobile } from "@/hooks/ui";
 import cn from "@/lib/utils/cn";
 import slugToTitle from "@/lib/utils/slug-to-title";
 import { PlusIcon, UserIcon } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Fragment, forwardRef } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
@@ -29,15 +30,8 @@ import { Button } from "./ui/button";
 
 export function SiteNavbar() {
   const isMobile = useIsMobile();
-  const { paths, navData } = useNav();
+  const paths = usePathname().split("/").slice(1);
 
-  const isLinkVisible = true; //navData?.links.length > 0 || false;
-  const isButtonVisible = true; //navData?.button.href !== "" || false;
-
-  // if (!navData) {
-  //   return null;
-  // }
-  //
   const links = [
     {
       href: "/profile/saved",

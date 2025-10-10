@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const STORAGE_HOSTNAME = process.env.STORAGE_HOSTNAME;
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   images: {
     remotePatterns: STORAGE_HOSTNAME
       ? [

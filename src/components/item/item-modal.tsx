@@ -50,7 +50,6 @@ export const ItemModal = memo((props: ItemModalProps) => {
           <ItemCarousel
             item={item}
             isLoading={isLoading}
-            isPreview={isPreview}
           />
 
           <CardHeader className="text-left p-0 grow mb-2 !block">

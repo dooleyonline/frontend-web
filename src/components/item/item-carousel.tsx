@@ -19,11 +19,10 @@ import { Skeleton } from "../ui/skeleton";
 type ItemCarouselProps = {
   item: Item | null | undefined;
   isLoading?: boolean;
-  isPreview?: boolean;
 };
 
 const ItemCarousel = memo((props: ItemCarouselProps) => {
-  const { item, isLoading = !!item, isPreview } = props;
+  const { item, isLoading = !!item } = props;
 
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);

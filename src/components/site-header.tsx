@@ -4,40 +4,23 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/ui";
 import { ArrowRightIcon, ChevronLeftIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { memo, useEffect, useState } from "react";
 
 import GridDistortion from "./ui/grid-distortion";
 
-const SiteHeader = () => {
-  const [status, setStatus] = useState<"disabled" | "collapsed" | "expanded">(
-    "expanded"
-  );
+type SiteHeaderProps = {
+  isExpanded?: boolean;
+};
+
+const SiteHeader = ({ isExpanded = false }: SiteHeaderProps) => {
   const isMobile = useIsMobile();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  useEffect(() => {
-    setStatus((prev) => {
-      switch (pathname.split("/")[0]) {
-        case "":
-          if (searchParams.size === 0) return "expanded";
-          else return "collapsed";
-        case "item":
-          if (prev === "expanded") return "expanded";
-          else return "collapsed";
-        default:
-          return prev;
-      }
-    });
-  }, [pathname, searchParams.size, status]);
-
-  if (status === "disabled") return null;
-
   return (
-    <motion.header
+    <header
       style={
-        status === "expanded"
+        isExpanded
           ? isMobile
             ? {
                 paddingTop: "60px",
@@ -55,53 +38,43 @@ const SiteHeader = () => {
               borderBottomWidth: "0px",
             }
       }
-      transition={{ ease: "anticipate" }}
       className="border-b px-4 sm:px-6 rounded-b-4xl w-full relative overflow-hidden"
     >
-      <AnimatePresence>
-        {status === "expanded" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.5 }}
-            exit={{ opacity: 0 }}
-            className="absolute left-0 top-0 size-full"
-          >
-            <GridDistortion
-              imageSrc="/images/banner.png"
-              grid={10}
-              mouse={0.1}
-              strength={0.5}
-              relaxation={0.9}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isExpanded && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.5 }}
+          transition={{ delay: 0.3, duration: 1, ease: "easeIn" }}
+          className="absolute left-0 top-0 size-full"
+        >
+          <GridDistortion
+            imageSrc="/images/banner.png"
+            grid={10}
+            mouse={0.1}
+            strength={0.5}
+            relaxation={0.9}
+          />
+        </motion.div>
+      )}
 
-      <AnimatePresence>
-        {status === "expanded" && (
-          <motion.h1
-            // initial={{ opacity: 0, height: "0", paddingBottom: 0 }}
-            animate={{ opacity: 1, height: "auto", paddingBottom: 16 }}
-            exit={{ opacity: 0, height: "0", paddingBottom: 0 }}
-            className="font-display block overflow-hidden leading-none relative z-10 pb-4"
-          >
-            Welcome to DooleyOnline
-          </motion.h1>
-        )}
-      </AnimatePresence>
+      {isExpanded && (
+        <h1 className="font-display block overflow-hidden leading-none relative z-10 pb-4 pointer-events-none">
+          Welcome to DooleyOnline
+        </h1>
+      )}
 
       <SearchBar
-        status={status}
+        isExpanded={isExpanded}
         searchParams={searchParams}
         searchPlaceholder="Search for anything ..."
         className="relative z-10"
       />
-    </motion.header>
+    </header>
   );
 };
 
 type SearchBarProps = {
-  status: "disabled" | "collapsed" | "expanded";
+  isExpanded: boolean;
   searchPlaceholder: string;
   searchParams: URLSearchParams;
   className?: string;
@@ -122,7 +95,12 @@ const parseInput = (input: string) => {
 };
 
 const SearchBar = memo(
-  ({ searchPlaceholder, status, className, searchParams }: SearchBarProps) => {
+  ({
+    searchPlaceholder,
+    isExpanded,
+    className,
+    searchParams,
+  }: SearchBarProps) => {
     const router = useRouter();
 
     const q = searchParams.get("q");
@@ -147,7 +125,7 @@ const SearchBar = memo(
     return (
       <div className={`${className ?? ""} flex items-center w-full`}>
         <AnimatePresence>
-          {status === "collapsed" && (
+          {!isExpanded && (
             <motion.div
               key="modal"
               initial={{ width: "0px", marginRight: "0px" }}

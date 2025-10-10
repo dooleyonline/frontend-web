@@ -2,6 +2,7 @@
 
 import { CategoryGallery } from "@/components/category";
 import ItemGallery from "@/components/item/item-gallery";
+import SiteHeader from "@/components/site-header";
 import Section, { SectionHeader } from "@/components/site-section";
 import api from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
@@ -15,22 +16,25 @@ const Home = () => {
 
   return (
     <>
-      <Section id="categories">
-        <CategoryGallery {...categoryRes} />
-      </Section>
+      <SiteHeader isExpanded />
+      <main>
+        <Section id="categories">
+          <CategoryGallery {...categoryRes} />
+        </Section>
 
-      <Section id="for-you">
-        <SectionHeader
-          title="For You"
-          subtitle="Picked based on your recent search. Updated daily."
-        />
-        <ItemGallery {...forYouRes} />
-      </Section>
+        <Section id="for-you">
+          <SectionHeader
+            title="For You"
+            subtitle="Picked based on your recent search. Updated daily."
+          />
+          <ItemGallery {...forYouRes} />
+        </Section>
 
-      <Section id="trending">
-        <SectionHeader title="Trending" subtitle="Discover hot new items" />
-        <ItemGallery {...trendingRes} />
-      </Section>
+        <Section id="trending">
+          <SectionHeader title="Trending" subtitle="Discover hot new items" />
+          <ItemGallery {...trendingRes} />
+        </Section>
+      </main>
     </>
   );
 };

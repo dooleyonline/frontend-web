@@ -7,20 +7,20 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useNav } from "@/hooks/ui";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-export function NavMain({
-  items,
-}: {
+type NavMainProps = {
   items: {
     title: string;
     url: string;
     icon?: LucideIcon;
   }[];
-}) {
-  const { currentPage } = useNav();
+};
+
+export const NavMain = ({ items }: NavMainProps) => {
+  const pathname = usePathname();
 
   return (
     <SidebarGroup>
@@ -32,11 +32,9 @@ export function NavMain({
               href={item.url}
               style={{
                 background:
-                  currentPage === item.url.slice(1)
-                    ? "var(--sidebar-accent)"
-                    : "",
+                  pathname === item.url ? "var(--sidebar-accent)" : "",
                 color:
-                  currentPage === item.url.slice(1)
+                  pathname === item.url
                     ? "var(--sidebar-accent-foreground)"
                     : "",
               }}
@@ -54,4 +52,4 @@ export function NavMain({
       </SidebarGroupContent>
     </SidebarGroup>
   );
-}
+};
