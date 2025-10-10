@@ -37,3 +37,6 @@ substitutions:
   _NEXT_PUBLIC_BASE_URL: "https://dooleyonline.net"
   _NEXT_PUBLIC_API_BASE_URL: "https://api.dooleyonline.net"
   _NEXT_PUBLIC_STORAGE_URL: "https://brbqduswpnlcafksjsjo.supabase.co/storage/v1/object/public"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
