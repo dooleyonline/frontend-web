@@ -1,0 +1,14 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "gcr.io/dooleyonline/frontend-web"
+      - "."
+      - "--build-arg"
+      - "NEXT_PUBLIC_BASE_URL='https://dooleyonline.net'"
+      - "--build-arg"
+      - "NEXT_PUBLIC_API_BASE_URL='https://api.dooleyonline.net'"
+      - "--build-arg"
+      - "NEXT_PUBLIC_STORAGE_URL='https://brbqduswpnlcafksjsjo.supabase.co/storage/v1/object/public'"
+images: ["gcr.io/dooleyonline/frontend-web"]

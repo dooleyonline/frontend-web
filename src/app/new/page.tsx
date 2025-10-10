@@ -15,7 +15,6 @@ import Step2 from "./(form)/step-2";
 import Step3 from "./(form)/step-3";
 
 const MarketplaceNew = () => {
-  // const router = useRouter();
   const [step, setStep] = useState(1);
 
   const form = useForm<
