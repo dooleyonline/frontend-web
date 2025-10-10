@@ -36,9 +36,8 @@ RUN corepack enable
 FROM base AS prod
 COPY pnpm-lock.yaml /app/
 WORKDIR /app
-RUN pnpm fetch --prod
-
 COPY . /app
+RUN pnpm install --prod --frozen-lockfile
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ARG NEXT_PUBLIC_BASE_URL
