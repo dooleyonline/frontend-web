@@ -12,7 +12,7 @@ FROM base AS deps
 RUN pnpm install --prod --frozen-lockfile
 
 FROM base AS builder
-ENV NEXT_PUBLIC_BASE_URL="https://dooleyonline.net"
+# ENV NEXT_PUBLIC_BASE_URL="https://dooleyonline.net"
 RUN pnpm install --frozen-lockfile
 RUN pnpm run build
 
