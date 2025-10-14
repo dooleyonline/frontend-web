@@ -1,7 +1,4 @@
-import { STORAGE_URL } from "@/lib/env";
 import type { NextConfig } from "next";
-
-const storageURL = new URL(STORAGE_URL);
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -9,7 +6,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: storageURL.host,
+        hostname: "brbqduswpnlcafksjsjo.supabase.co",
         pathname: "/**",
       },
     ],
