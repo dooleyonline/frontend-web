@@ -1,6 +1,6 @@
 import cn from "./cn";
 import { createApiUrl } from "./create-api-url";
-import { createImageURL } from "./create-image-url";
+import { createImageUrl } from "./create-image-url";
 import formatPrice from "./format-price";
 import getRelativeTime from "./get-relative-time";
 import processImage from "./process-image";
@@ -10,7 +10,7 @@ export {
   cn,
   formatPrice,
   createApiUrl,
-  createImageURL,
+  createImageUrl as createImageURL,
   getRelativeTime,
   slugToTitle,
   processImage,

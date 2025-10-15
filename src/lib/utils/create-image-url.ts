@@ -1,7 +1,7 @@
 import { STORAGE_URL } from "@/lib/env";
 
-export const createImageURL = (src: string): string => {
-  const url = new URL(`image/${src}`, STORAGE_URL);
+export const createImageUrl = (src: string): string => {
+  const url = new URL(`/storage/v1/object/public/image/${src}`, STORAGE_URL);
 
   return url.href;
 };
