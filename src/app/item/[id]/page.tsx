@@ -19,3 +19,12 @@ const MarketplaceItem = async ({
 };
 
 export default MarketplaceItem;
+
+export const generateStaticParams = async () => {
+  const client = new QueryClient();
+  const ids = client
+    .fetchQuery(api.item.getMany())
+    .then((data) => data.map((d) => ({ id: d.id.toString() })));
+
+  return ids;
+};

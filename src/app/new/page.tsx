@@ -120,9 +120,9 @@ const MarketplaceNew = () => {
               // seller: "John Doe",
               category: form.watch("category"),
               subcategory: form.watch("subcategory"),
-              images: form
-                .watch("images")
-                .map((img) => URL.createObjectURL(img as File)),
+              // TODO: temporary src
+              images: form.watch("images").map(() => "/images/fallback.png"),
+              // .map((img) => URL.createObjectURL(img as File)),
             } satisfies Item
           }
           isPreview
