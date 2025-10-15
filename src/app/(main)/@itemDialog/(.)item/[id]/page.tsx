@@ -12,7 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { memo, use } from "react";
 
-const ItemDialog = memo(({ params }: { params: Promise<{ id: string }> }) => {
+const ItemDialog = ({ params }: { params: Promise<{ id: string }> }) => {
   const { id } = use(params);
   const router = useRouter();
 
@@ -32,7 +32,6 @@ const ItemDialog = memo(({ params }: { params: Promise<{ id: string }> }) => {
       </DialogContent>
     </Dialog>
   );
-});
-ItemDialog.displayName = "ItemDialog";
+};
 
 export default ItemDialog;
