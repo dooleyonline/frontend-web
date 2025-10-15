@@ -10,7 +10,7 @@ import {
 import api from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { memo, use } from "react";
+import { use } from "react";
 
 const ItemDialog = ({ params }: { params: Promise<{ id: string }> }) => {
   const { id } = use(params);
