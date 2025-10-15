@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import api from "@/lib/api";
-import { QueryClient, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { use } from "react";
 
@@ -35,14 +35,3 @@ const ItemDialog = ({ params }: { params: Promise<{ id: string }> }) => {
 };
 
 export default ItemDialog;
-
-// export const dynamic = "force-static";
-// export const revalidate = 600;
-// export const generateStaticParams = async () => {
-//   const client = new QueryClient();
-//   const ids = client
-//     .fetchQuery(api.item.getMany())
-//     .then((data) => data.map((d) => ({ id: d.id.toString() })));
-
-//   return ids;
-// };

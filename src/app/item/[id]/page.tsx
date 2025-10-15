@@ -20,6 +20,9 @@ const MarketplaceItem = async ({
 
 export default MarketplaceItem;
 
+export const dynamic = "force-static";
+export const revalidate = 600;
+
 export const generateStaticParams = async () => {
   const client = new QueryClient();
   const ids = client
