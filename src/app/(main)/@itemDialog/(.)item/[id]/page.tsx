@@ -36,13 +36,13 @@ const ItemDialog = ({ params }: { params: Promise<{ id: string }> }) => {
 
 export default ItemDialog;
 
-export const dynamic = "force-static";
-export const revalidate = 600;
-export const generateStaticParams = async () => {
-  const client = new QueryClient();
-  const ids = client
-    .fetchQuery(api.item.getMany())
-    .then((data) => data.map((d) => ({ id: d.id.toString() })));
+// export const dynamic = "force-static";
+// export const revalidate = 600;
+// export const generateStaticParams = async () => {
+//   const client = new QueryClient();
+//   const ids = client
+//     .fetchQuery(api.item.getMany())
+//     .then((data) => data.map((d) => ({ id: d.id.toString() })));
 
-  return ids;
-};
+//   return ids;
+// };
