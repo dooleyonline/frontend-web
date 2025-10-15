@@ -271,9 +271,7 @@ const FileItem = ({ image, index }: { image: File; index: number }) => {
         className="h-fit cursor-grab bg-background hover:bg-accent rounded-sm"
       >
         <Image
-          // src={URL.createObjectURL(image)}
-          // TODO: temporary src
-          src="/images/fallback.png"
+          src={URL.createObjectURL(image)}
           alt="image"
           width={40}
           height={40}
