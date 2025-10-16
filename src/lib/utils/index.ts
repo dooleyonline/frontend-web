@@ -1,5 +1,4 @@
 import cn from "./cn";
-import { createApiUrl } from "./create-api-url";
 import { createImageUrl } from "./create-image-url";
 import formatPrice from "./format-price";
 import getRelativeTime from "./get-relative-time";
@@ -9,7 +8,6 @@ import slugToTitle from "./slug-to-title";
 export {
   cn,
   formatPrice,
-  createApiUrl,
   createImageUrl as createImageURL,
   getRelativeTime,
   slugToTitle,

@@ -1,6 +1,6 @@
 import { fonts } from "@/components/fonts";
 import Providers from "@/components/providers";
-import { AppSidebar } from "@/components/sidebar/app-sidebar";
+import { Sidebar } from "@/components/sidebar/sidebar";
 import { SiteNavbar } from "@/components/site-navbar";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
@@ -33,7 +33,7 @@ const RootLayout = ({
     <html lang="en">
       <body className={`${fontVariables} font-sans antialiased h-svh`}>
         <Providers>
-          <AppSidebar variant="inset" />
+          <Sidebar variant="inset" />
           <SidebarInset className="@container">
             <SiteNavbar />
             <Toaster />

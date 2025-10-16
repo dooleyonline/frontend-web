@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Sidebar,
+  Sidebar as SidebarComponent,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
@@ -13,7 +13,7 @@ import {
   ShoppingBasketIcon,
 } from "lucide-react";
 import Image from "next/image";
-import * as React from "react";
+import { ComponentProps } from "react";
 
 import { NavMain } from "./nav-main";
 import { NavSecondary } from "./nav-secondary";
@@ -51,9 +51,9 @@ const data = {
   ],
 };
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function Sidebar({ ...props }: ComponentProps<typeof SidebarComponent>) {
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <SidebarComponent collapsible="offcanvas" {...props}>
       <SidebarHeader className="mb-4">
         <div className="flex items-center gap-2 pointer-events-none">
           <Image src="/logo.svg" alt="logo" width={32} height={32} />
@@ -69,6 +69,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <NavUser user={data.user} />
       </SidebarFooter>
-    </Sidebar>
+    </SidebarComponent>
   );
 }
