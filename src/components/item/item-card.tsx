@@ -34,10 +34,9 @@ import { ItemConditionBadge, ItemNegotiableBadge } from "./item-badge";
 
 type ItemCardProps = {
   item: Item;
-  index: number;
 };
 
-const ItemCard = memo(({ item, index }: ItemCardProps) => {
+const ItemCard = memo(({ item }: ItemCardProps) => {
   const searchParams = useSearchParams();
   const relativeTime = getRelativeTime(item.postedAt);
   const link = `/item/${item.id}?${searchParams.toString()}`;
@@ -62,7 +61,7 @@ const ItemCard = memo(({ item, index }: ItemCardProps) => {
       fill
       loading="lazy"
       placeholder="blur"
-      blurDataURL={item.placeholder}
+      blurDataURL={item.placeholder ?? undefined}
       sizes="(max-width: 640px) 50vw, (max-width: 768px) 20vw, (max-width: 1024px) 18vw, (max-width: 1280px) 15vw, (max-width: 1920) 12vw, 350px"
       className="size-full object-cover cursor-pointer"
     />
@@ -149,6 +148,7 @@ const ItemCard = memo(({ item, index }: ItemCardProps) => {
   );
 });
 ItemCard.displayName = "ItemCard";
+
 export default ItemCard;
 
 export const ItemCardSkeleton = () => {

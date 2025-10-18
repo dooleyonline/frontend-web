@@ -6,7 +6,7 @@ export const itemJsonSchema = z.object({
   id: z.number(),
   name: z.string(),
   description: z.string(),
-  placeholder: z.string(),
+  placeholder: z.string().nullable(),
   images: z.array(z.string()),
   price: z.number(),
   condition: z.number(),

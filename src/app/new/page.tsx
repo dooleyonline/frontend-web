@@ -114,6 +114,7 @@ const MarketplaceNew = () => {
               id: -1,
               postedAt: new Date(),
               soldAt: null,
+              placeholder: null,
               // isSold: false,
               isNegotiable: form.watch("negotiable") || false,
               views: 112,

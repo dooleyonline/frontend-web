@@ -79,7 +79,7 @@ export const ItemGalleryUI = ({ data }: ItemGalleryUIProps) => {
       </div>
       <div className="grid grid-cols-2 gap-x-0 gap-y-1 md:gap-x-1 md:gap-y-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
         {filteredData?.map((item: Item, i: number) => (
-          <ItemCard key={i} item={item} index={i} />
+          <ItemCard key={i} item={item} />
         ))}
       </div>
     </>
