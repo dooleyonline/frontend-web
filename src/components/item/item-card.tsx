@@ -60,8 +60,9 @@ const ItemCard = memo(({ item, index }: ItemCardProps) => {
       alt={item.name}
       quality={40}
       fill
-      priority={index < 10}
-      loading="eager"
+      loading="lazy"
+      placeholder="blur"
+      blurDataURL={item.placeholder}
       sizes="(max-width: 640px) 50vw, (max-width: 768px) 20vw, (max-width: 1024px) 18vw, (max-width: 1280px) 15vw, (max-width: 1920) 12vw, 350px"
       className="size-full object-cover cursor-pointer"
     />

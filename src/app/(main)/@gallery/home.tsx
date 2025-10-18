@@ -1,25 +1,18 @@
-"use client";
+"use server";
 
 import { CategoryGallery } from "@/components/category";
-import ItemGallery from "@/components/item/item-gallery";
+import { ItemGallery } from "@/components/item";
 import SiteHeader from "@/components/site-header";
 import Section, { SectionHeader } from "@/components/site-section";
 import api from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
 
-const Home = () => {
-  const categoryRes = useQuery(api.category.getAll());
-
-  // TODO: replace these with actual for-you and trending data
-  const forYouRes = useQuery(api.item.getMany());
-  const trendingRes = useQuery(api.item.getMany());
-
+const Home = async () => {
   return (
     <>
       <SiteHeader isExpanded />
       <main>
         <Section id="categories">
-          <CategoryGallery {...categoryRes} />
+          <CategoryGallery />
         </Section>
 
         <Section id="for-you">
@@ -27,12 +20,12 @@ const Home = () => {
             title="For You"
             subtitle="Picked based on your recent search. Updated daily."
           />
-          <ItemGallery {...forYouRes} />
+          <ItemGallery query={api.item.getMany()} />
         </Section>
 
         <Section id="trending">
           <SectionHeader title="Trending" subtitle="Discover hot new items" />
-          <ItemGallery {...trendingRes} />
+          <ItemGallery query={api.item.getMany()} />
         </Section>
       </main>
     </>

@@ -1,21 +1,23 @@
-import { Category } from "@/lib/types";
+import api from "@/lib/api";
+import { serverQuery } from "@/lib/api/shared";
 import { Suspense } from "react";
 
 import { Error } from "../communication";
-import { ItemCardSkeleton } from "../item/item-card";
 import { CategoryCard, CategoryCardSkeleton } from "./category-card";
 
-type CategoryGalleryProps = {
-  data: Category[] | null | undefined;
-  isLoading: boolean;
-  error: Error | null;
+export const CategoryGallery = async () => {
+  return (
+    <div className="grid grid-cols-2 gap-2 md:gap-4 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10">
+      <Suspense fallback={<CategoryGallerySkeleton />}>
+        <CategoryGalleryData />
+      </Suspense>
+    </div>
+  );
 };
 
-export const CategoryGallery = ({
-  data,
-  isLoading,
-  error,
-}: CategoryGalleryProps) => {
+const CategoryGalleryData = async () => {
+  const { data, error } = await serverQuery(api.category.getAll());
+
   if (error) {
     return (
       <Error
@@ -24,21 +26,12 @@ export const CategoryGallery = ({
       />
     );
   }
-  if (!isLoading && (!data || data.length === 0)) {
-    return <p className="text-muted-foreground">No items found.</p>;
-  }
 
-  return (
-    <div className="grid grid-cols-2 gap-2 md:gap-4 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10">
-      {isLoading
-        ? Array.from({ length: 10 }).map((_, i) => (
-            <CategoryCardSkeleton key={i} />
-          ))
-        : data?.map((c, i) => (
-            <Suspense fallback={<ItemCardSkeleton />} key={i}>
-              <CategoryCard key={i} category={c} />
-            </Suspense>
-          ))}
-    </div>
-  );
+  return data?.map((c, i) => <CategoryCard key={i} category={c} />);
+};
+
+const CategoryGallerySkeleton = () => {
+  return Array.from({ length: 10 }).map((_, i) => (
+    <CategoryCardSkeleton key={i} />
+  ));
 };

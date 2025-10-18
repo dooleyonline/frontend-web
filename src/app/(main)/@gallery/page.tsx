@@ -1,19 +1,19 @@
-"use client";
-
 import { itemSearchParams } from "@/lib/types";
-import { notFound, useSearchParams } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import Home from "./home";
 import Search from "./search";
 
-const Gallery = () => {
-  const searchParams = useSearchParams();
-  const params = itemSearchParams.safeParse(
-    Object.fromEntries(searchParams.entries())
-  );
+type GalleryProps = {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
-  if (!params.success) notFound();
+const Gallery = async ({ searchParams }: GalleryProps) => {
+  const sp = await searchParams;
+  const { data, success } = await itemSearchParams.safeParseAsync(sp);
 
-  return searchParams.size > 0 ? <Search params={params.data} /> : <Home />;
+  if (!success) notFound();
+
+  return !!data.q || !!data.category ? <Search params={data} /> : <Home />;
 };
 export default Gallery;
