@@ -16,3 +16,7 @@ export const signIn = (params: SignIn): ApiQueryOptions<string> => {
     },
   };
 };
+
+// export const status = () => {}
+//
+// const {data, error} = useQuery(api.auth.status())

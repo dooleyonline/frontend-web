@@ -24,7 +24,6 @@ export const get = (id: number | string): ApiQueryOptions<Item> => {
     queryKey: [url],
     queryFn: async () => {
       const res = await apiClient.get(url);
-      // const res = await fetch(url)
       const { data, error } = await itemSchema.safeParseAsync(res.data);
       if (error) throw new Error(error.message);
       return data;
