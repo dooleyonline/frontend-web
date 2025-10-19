@@ -48,7 +48,7 @@ const SiteHeader = ({ isExpanded = false }: SiteHeaderProps) => {
           className="absolute left-0 top-0 size-full"
         >
           <GridDistortion
-            imageSrc="/images/banner.png"
+            imageSrc="/images/banner.webp"
             grid={10}
             mouse={0.1}
             strength={0.5}

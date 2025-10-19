@@ -43,7 +43,7 @@ const ItemCard = memo(({ item }: ItemCardProps) => {
   const isMobile = useIsMobile();
   const router = useRouter();
 
-  function handleNavigate(e: { preventDefault: () => void }) {
+  const handleNavigate = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     if (isMobile) {
       // Skip intercepting route if on mobile
@@ -55,7 +55,7 @@ const ItemCard = memo(({ item }: ItemCardProps) => {
 
   const thumbnail = (
     <Image
-      src={item.images?.[0] ?? "/images/fallback.png"}
+      src={item.images?.[0] ?? "/images/fallback.webp"}
       alt={item.name}
       quality={40}
       fill
