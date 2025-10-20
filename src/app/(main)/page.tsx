@@ -1,5 +1,7 @@
 "use client";
 
-export default function Main() {
+const MainPage = () => {
   return null;
-}
+};
+
+export default MainPage;

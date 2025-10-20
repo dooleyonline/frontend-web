@@ -4,11 +4,7 @@ import { notFound } from "next/navigation";
 import Home from "./home";
 import Search from "./search";
 
-type GalleryProps = {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-};
-
-const Gallery = async ({ searchParams }: GalleryProps) => {
+const GalleryPage = async ({ searchParams }: PageProps<"/">) => {
   const sp = await searchParams;
   const { data, success } = await itemSearchParams.safeParseAsync(sp);
 
@@ -16,4 +12,4 @@ const Gallery = async ({ searchParams }: GalleryProps) => {
 
   return !!data.q || !!data.category ? <Search params={data} /> : <Home />;
 };
-export default Gallery;
+export default GalleryPage;

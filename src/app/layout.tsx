@@ -4,14 +4,15 @@ import { Sidebar } from "@/components/sidebar/sidebar";
 import { SiteNavbar } from "@/components/site-navbar";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import type { Metadata, Viewport } from "next";
-import { ReactNode } from "react";
 
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "DooleyOnline",
-  description: "Welcome to DooleyOnline, a hub for Emory students",
+  description:
+    "Welcome to DooleyOnline, a secondhand marketplace for Emory students",
 };
 
 export const viewport: Viewport = {
@@ -24,11 +25,7 @@ const fontVariables = Object.entries(fonts)
   .map(([, v]) => v.variable)
   .join(" ");
 
-const RootLayout = ({
-  children,
-}: Readonly<{
-  children: ReactNode;
-}>) => {
+const RootLayout = ({ children }: LayoutProps<"/">) => {
   return (
     <html lang="en">
       <body className={`${fontVariables} font-sans antialiased h-svh`}>
@@ -39,6 +36,7 @@ const RootLayout = ({
             <Toaster />
             {children}
           </SidebarInset>
+          <ReactQueryDevtools />
         </Providers>
       </body>
     </html>

@@ -24,7 +24,7 @@ import { memo } from "react";
 import { Skeleton } from "../ui/skeleton";
 
 type ItemModalProps = {
-  item?: Item;
+  item?: Item | null;
   isLoading?: boolean;
   error?: unknown;
   isPreview?: boolean;

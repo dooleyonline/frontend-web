@@ -1,19 +1,15 @@
 import { ItemModal } from "@/components/item";
 import api from "@/lib/api";
-import { QueryClient } from "@tanstack/react-query";
+import { serverQuery } from "@/lib/api/shared";
 
-const MarketplaceItem = async ({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) => {
+const MarketplaceItem = async ({ params }: PageProps<"/item/[id]">) => {
   const { id } = await params;
-  const queryClient = new QueryClient();
-  const data = await queryClient.fetchQuery(api.item.get(id));
+  const { data, error } = await serverQuery(api.item.get(id));
+  await serverQuery(api.item.view(id));
 
   return (
     <main className="size-full">
-      <ItemModal item={data} isLoading={false} />
+      <ItemModal item={data} isLoading={false} error={error} />
     </main>
   );
 };
@@ -24,10 +20,9 @@ export const dynamic = "force-static";
 export const revalidate = 600;
 
 export const generateStaticParams = async () => {
-  const client = new QueryClient();
-  const ids = client
-    .fetchQuery(api.item.getMany())
-    .then((data) => data.map((d) => ({ id: d.id.toString() })));
+  const ids = serverQuery(api.item.getMany()).then(({ data }) =>
+    data?.map((d) => ({ id: d.id.toString() }))
+  );
 
   return ids;
 };
