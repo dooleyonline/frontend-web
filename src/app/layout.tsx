@@ -6,6 +6,7 @@ import { SidebarInset } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import type { Metadata, Viewport } from "next";
+import { ReactNode } from "react";
 
 import "./globals.css";
 
@@ -25,7 +26,13 @@ const fontVariables = Object.entries(fonts)
   .map(([, v]) => v.variable)
   .join(" ");
 
-const RootLayout = ({ children }: LayoutProps<"/">) => {
+const RootLayout = ({
+  children,
+  mapModal,
+}: Readonly<{
+  children: ReactNode;
+  mapModal?: ReactNode;
+}>) => {
   return (
     <html lang="en">
       <body className={`${fontVariables} font-sans antialiased h-svh`}>
@@ -35,8 +42,8 @@ const RootLayout = ({ children }: LayoutProps<"/">) => {
             <SiteNavbar />
             <Toaster />
             {children}
+            {mapModal ?? null}
           </SidebarInset>
-          <ReactQueryDevtools />
         </Providers>
       </body>
     </html>
