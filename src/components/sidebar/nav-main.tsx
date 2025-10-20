@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sidebar";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 type NavMainProps = {
   pages: {
@@ -21,6 +21,7 @@ type NavMainProps = {
 
 export const NavMain = ({ pages }: NavMainProps) => {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <SidebarGroup>
@@ -30,7 +31,7 @@ export const NavMain = ({ pages }: NavMainProps) => {
             <Link
               key={page.title}
               href={page.url}
-              shallow={true}
+              onClick={router.refresh}
               style={{
                 background:
                   pathname === page.url ? "var(--sidebar-accent)" : "",
