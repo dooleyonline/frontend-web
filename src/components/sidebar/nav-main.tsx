@@ -12,38 +12,39 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 type NavMainProps = {
-  items: {
+  pages: {
     title: string;
     url: string;
     icon?: LucideIcon;
   }[];
 };
 
-export const NavMain = ({ items }: NavMainProps) => {
+export const NavMain = ({ pages }: NavMainProps) => {
   const pathname = usePathname();
 
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
         <SidebarMenu>
-          {items.map((item) => (
+          {pages.map((page) => (
             <Link
-              key={item.title}
-              href={item.url}
+              key={page.title}
+              href={page.url}
+              shallow={true}
               style={{
                 background:
-                  pathname === item.url ? "var(--sidebar-accent)" : "",
+                  pathname === page.url ? "var(--sidebar-accent)" : "",
                 color:
-                  pathname === item.url
+                  pathname === page.url
                     ? "var(--sidebar-accent-foreground)"
                     : "",
               }}
               className="cursor-pointer overflow-hidden rounded-md"
             >
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip={item.title}>
-                  {item.icon && <item.icon />}
-                  <span>{item.title}</span>
+                <SidebarMenuButton tooltip={page.title}>
+                  {page.icon && <page.icon />}
+                  <span>{page.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </Link>

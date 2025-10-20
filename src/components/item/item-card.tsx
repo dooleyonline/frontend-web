@@ -128,7 +128,7 @@ const ItemCard = memo(({ item }: ItemCardProps) => {
       <HoverCardTrigger asChild className="touch-pan-y !block">
         <Card className="overflow-hidden border-none rounded-md shadow-none p-1 hover:bg-accent relative cursor-pointer">
           <CardContent className="relative overflow-hidden p-0 rounded-md mb-2">
-            <Link href={link} onNavigate={handleNavigate}>
+            <Link href={link} scroll={false} onNavigate={handleNavigate}>
               <AspectRatio ratio={1 / 1} className="w-full relative">
                 {thumbnail}
               </AspectRatio>
@@ -137,7 +137,7 @@ const ItemCard = memo(({ item }: ItemCardProps) => {
             {favoriteButton}
           </CardContent>
 
-          <Link href={link} onNavigate={handleNavigate}>
+          <Link href={link} scroll={false} onNavigate={handleNavigate}>
             {info}
           </Link>
         </Card>
