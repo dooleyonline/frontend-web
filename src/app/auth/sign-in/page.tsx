@@ -40,7 +40,9 @@ const SignInPage = () => {
       const { data } = await userSchema.nullable().safeParseAsync(res.data);
       console.log(data);
       if (data) setUser(data);
-    } catch (error) {}
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   useEffect(() => {

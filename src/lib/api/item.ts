@@ -13,7 +13,7 @@ export const getMany = (params?: ItemSearchParams): ApiQueryOptions<Item[]> => {
         .array(itemSchema)
         .safeParseAsync(res.data);
       if (error) throw new Error(error.message);
-      return data.slice(10);
+      return data;
     },
   };
 };

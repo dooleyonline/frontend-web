@@ -21,7 +21,7 @@ export const revalidate = 600;
 
 export const generateStaticParams = async () => {
   const ids = serverQuery(api.item.getMany()).then(({ data }) =>
-    data?.map((d) => ({ id: d.id.toString() }))
+    data ? data.map((item) => ({ id: item.id.toString() })) : []
   );
 
   return ids;
