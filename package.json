@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021"
@@ -74,7 +75,6 @@
     "zod": "^3.25.56"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4.1.7",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/node": "^20",
