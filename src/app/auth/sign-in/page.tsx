@@ -2,13 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Form,
   FormControl,
   FormField,
@@ -17,14 +10,18 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import api from "@/lib/api";
 import { apiClient } from "@/lib/api/shared";
 import { SignIn, User, signInSchema, userSchema } from "@/lib/types";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
 const SignInPage = () => {
   const [user, setUser] = useState<User | null>(null);
+  const me = useQuery(api.auth.me());
+  const queryClient = useQueryClient();
   const form = useForm<SignIn>({
     resolver: zodResolver(signInSchema),
     defaultValues: {
@@ -33,46 +30,26 @@ const SignInPage = () => {
     },
   });
 
-  const getAuthStatus = async () => {
-    const url = "auth";
-    try {
-      const res = await apiClient.get(url);
-      const { data } = await userSchema.nullable().safeParseAsync(res.data);
-      console.log(data);
-      if (data) setUser(data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   useEffect(() => {
-    void getAuthStatus();
+    if (me.error) console.error(me.error);
+    setUser(me.data ?? null);
+    console.log(me.data);
+  }, [me]);
+
+  const handleSignIn = useCallback(async (params: SignIn) => {
+    console.log("logging in");
+    const res = await queryClient.fetchQuery(api.auth.signIn(params));
+    setUser(res ?? null);
   }, []);
 
-  const handleSignIn = async (values: SignIn) => {
-    const url = "auth/login";
-    const res = await apiClient.post(url, values);
-    const { data, error } = await userSchema.safeParseAsync(res.data);
-    if (error) console.error(error);
-    if (data) setUser(data);
-  };
-
-  const handleSignOut = async () => {
-    const url = "auth/logout";
-    await apiClient.post(url);
-    setUser(null);
-  };
+  console.log(user)
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Sign In</CardTitle>
-          <CardDescription>
-            Enter your email below to sign in to your account.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <main className="flex items-center justify-center h-full relative">
+      <div className="absolute top-0 left-0 size-full bg-center bg-cover bg-[url(/images/0.webp)] mask-size-[100px_100px] mask-[url(/noise.webp)]"></div>
+      <div className="w-full max-w-xl relative">
+        <h2 className="text-4xl font-display">Welcome!</h2>
+        <div className="p-4 mt-2">
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(handleSignIn)}
@@ -86,7 +63,7 @@ const SignInPage = () => {
                     <FormLabel>Email</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="name@example.com"
+                        placeholder="name@emory.edu"
                         type="text"
                         {...field}
                       />
@@ -112,23 +89,18 @@ const SignInPage = () => {
                   </FormItem>
                 )}
               />
-              <Button type="submit" disabled={user !== null} className="w-full">
+              <Button
+                type="submit"
+                disabled={user !== null || !form.formState.isValid}
+                className="w-full"
+              >
                 {user ? `Signed in as ${user.email}` : "Sign In"}
               </Button>
             </form>
           </Form>
-          <Button
-            type="submit"
-            onClick={handleSignOut}
-            disabled={user === null}
-            variant="secondary"
-            className="w-full mt-2"
-          >
-            Sign Out
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </div>
+    </main>
   );
 };
 
