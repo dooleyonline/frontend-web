@@ -20,7 +20,7 @@ const ChatRoomPage = ({ params }: PageProps<"/chat/[id]">) => {
   const [messages, setMessages] = useState<string[]>([]);
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(
-    // `ws://localhost:8080/${id}/ws`
+    // `ws://localhost:8080/chat/${id}/ws`
     "wss://echo.websocket.org"
   );
 
@@ -31,7 +31,7 @@ const ChatRoomPage = ({ params }: PageProps<"/chat/[id]">) => {
     if (!lastMessage) return;
     // const { error } = chatMessageSchema.safeParse(lastMessage);
     // console.error(error);
-    console.log(lastMessage)
+    console.log(lastMessage);
 
     setMessages((prev) => [...prev, lastMessage.data]);
   }, [lastMessage]);
