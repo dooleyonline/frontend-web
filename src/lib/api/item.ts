@@ -6,7 +6,7 @@ import { ApiQueryOptions, apiClient } from "./shared";
 export const getMany = (params?: ItemSearchParams): ApiQueryOptions<Item[]> => {
   const url = "item";
   return {
-    queryKey: [url],
+    queryKey: [url, params],
     queryFn: async () => {
       const res = await apiClient.get(url, { params });
       const { data, error } = await z

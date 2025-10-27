@@ -39,6 +39,7 @@ export type Item = z.infer<typeof itemSchema>;
 export const itemSearchParams = z.object({
   q: z.string().optional(),
   category: z.string().optional(),
+  page: z.string().optional(),
 });
 
 export type ItemSearchParams = z.infer<typeof itemSearchParams>;

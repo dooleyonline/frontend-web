@@ -20,12 +20,12 @@ const Home = async () => {
             title="For You"
             subtitle="Picked based on your recent search. Updated daily."
           />
-          <ItemGallery query={api.item.getMany()} />
+          <ItemGallery query={api.item.getMany({ page: 1 })} />
         </Section>
 
         <Section id="trending">
           <SectionHeader title="Trending" subtitle="Discover hot new items" />
-          <ItemGallery query={api.item.getMany()} />
+          <ItemGallery query={api.item.getMany({ page: 2 })} />
         </Section>
       </main>
     </>

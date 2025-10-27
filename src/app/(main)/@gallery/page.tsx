@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 const GalleryPage = async ({ searchParams }: PageProps<"/">) => {
   const sp = await searchParams;
   const isHome = Object.entries(sp).length === 0;
-  const { data, success } = await itemSearchParams.safeParseAsync(sp);
+  const { data, error } = await itemSearchParams.safeParseAsync(sp);
 
-  if (!success) notFound();
+  if (error) notFound();
 
   return isHome ? <Home /> : <Search params={data} />;
 };
