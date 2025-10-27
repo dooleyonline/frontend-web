@@ -1,11 +1,6 @@
 import { z } from "zod";
 
-const urlSchema = z
-  .string()
-  .url()
-  .or(z.literal(""))
-  .nullable()
-  .optional();
+const urlSchema = z.url().or(z.literal("")).nullable().optional();
 
 const isoDateSchema = z
   .string()
@@ -23,49 +18,35 @@ export const chatParticipantSchema = z.object({
 
 export type ChatParticipant = z.infer<typeof chatParticipantSchema>;
 
-const chatMessageApiSchema = z.object({
-  id: z.union([z.string(), z.number()]).transform((value) => value.toString()),
-  roomId: z.string().optional(),
-  room_id: z.string().optional(),
-  senderId: z.string().optional(),
-  sender_id: z.string().optional(),
+const chatMessageJsonSchema = z.object({
+  id: z.number(),
+  room_id: z.string(),
+  sent_by: z.string(),
   body: z.string(),
-  sentAt: isoDateSchema,
-  edited: z.boolean().optional().default(false),
+  edited: z.boolean(),
+  sent_at: z.string(),
 });
 
-export const chatMessageSchema = chatMessageApiSchema.transform((data) => {
-  const chatroomId = data.roomId ?? data.room_id;
-  const senderId = data.senderId ?? data.sender_id;
-
-  if (!chatroomId) {
-    throw new Error("Chat message missing room identifier");
-  }
-  if (!senderId) {
-    throw new Error("Chat message missing sender identifier");
-  }
-
-  return {
-    id: data.id,
-    chatroomId,
-    senderId,
-    body: data.body,
-    sentAt: new Date(data.sentAt),
-    edited: data.edited ?? false,
-  };
-});
+export const chatMessageSchema = chatMessageJsonSchema.transform((data) => ({
+  id: data.id,
+  roomID: data.room_id,
+  sentBy: data.sent_by,
+  body: data.body,
+  sentAt: new Date(data.sent_at),
+  edited: data.edited,
+}));
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
-const chatroomApiSchema = z.object({
+const chatRoomJsonSchema = z.object({
   id: z.string(),
   updatedAt: isoDateSchema,
   unreadCount: z.number().int().nonnegative(),
   participants: z.array(z.union([z.string(), chatParticipantSchema])),
-  messages: z.array(chatMessageApiSchema),
+  messages: z.array(chatMessageJsonSchema),
 });
 
-export const chatroomSchema = chatroomApiSchema.transform((data) => {
+export const chatRoomSchema = chatRoomJsonSchema.transform((data) => {
   const participants = data.participants.map((participant) => {
     if (typeof participant === "string") {
       return chatParticipantSchema.parse({
@@ -79,11 +60,14 @@ export const chatroomSchema = chatroomApiSchema.transform((data) => {
 
     return chatParticipantSchema.parse({
       ...participant,
-      displayName: participant.displayName || participant.username || participant.id,
+      displayName:
+        participant.displayName || participant.username || participant.id,
     });
   });
 
-  const messages = data.messages.map((message) => chatMessageSchema.parse(message));
+  const messages = data.messages.map((message) =>
+    chatMessageSchema.parse(message)
+  );
 
   return {
     id: data.id,
@@ -95,7 +79,7 @@ export const chatroomSchema = chatroomApiSchema.transform((data) => {
   };
 });
 
-export type Chatroom = z.infer<typeof chatroomSchema>;
+export type Chatroom = z.infer<typeof chatRoomSchema>;
 
 export const sendMessageInputSchema = z.object({
   chatroomId: z.string(),

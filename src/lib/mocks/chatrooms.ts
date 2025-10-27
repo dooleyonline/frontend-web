@@ -5,12 +5,12 @@ import {
   ChatMessage,
   Chatroom,
   chatMessageSchema,
-  chatroomSchema,
+  chatRoomSchema,
   SendMessageInput,
   sendMessageInputSchema,
 } from "@/lib/types";
 
-type ChatroomInput = z.input<typeof chatroomSchema>;
+type ChatroomInput = z.input<typeof chatRoomSchema>;
 type ChatMessageInput = z.input<typeof chatMessageSchema>;
 
 const now = Date.now();
@@ -40,28 +40,28 @@ const initialChatroomsRaw: ChatroomInput[] = [
       },
     ],
     messages: [
-      {
-        id: "msg-1",
-        roomId: "room-1",
-        senderId: "clee753",
-        body: "Hey! Is the bike still available?",
-        sentAt: makeDate(-1000 * 60 * 60 * 2),
-        edited: false,
-      },
-      {
-        id: "msg-2",
-        roomId: "room-1",
-        senderId: MOCK_CURRENT_USER_ID,
-        body: "Yep, still available. Want to meet at Asbury Circle?",
-        sentAt: makeDate(-1000 * 60 * 60 * 1.5),
-        edited: false,
-      },
+      // {
+      //   id: "msg-1",
+      //   roomId: "room-1",
+      //   senderId: "clee753",
+      //   body: "Hey! Is the bike still available?",
+      //   sentAt: makeDate(-1000 * 60 * 60 * 2),
+      //   edited: false,
+      // },
+      // {
+      //   id: "msg-2",
+      //   roomId: "room-1",
+      //   senderId: MOCK_CURRENT_USER_ID,
+      //   body: "Yep, still available. Want to meet at Asbury Circle?",
+      //   sentAt: makeDate(-1000 * 60 * 60 * 1.5),
+      //   edited: false,
+      // },
       {
         id: "msg-3",
-        roomId: "room-1",
-        senderId: "clee753",
+        room_id: "room-1",
+        sent_by: "clee753",
         body: "Sounds good. Could you pin the spot?",
-        sentAt: makeDate(-1000 * 60 * 60 * 1.2),
+        sent_at: makeDate(-1000 * 60 * 60 * 1.2),
         edited: false,
       },
     ],
@@ -102,33 +102,33 @@ const initialChatroomsRaw: ChatroomInput[] = [
     messages: [
       {
         id: "msg-4",
-        roomId: "room-2",
-        senderId: "alin228",
+        room_id: "room-2",
+        sent_by: "alin228",
         body: "Group study tonight?",
-        sentAt: makeDate(-1000 * 60 * 50),
+        sent_at: makeDate(-1000 * 60 * 50),
         edited: false,
       },
-      {
-        id: "msg-5",
-        roomId: "room-2",
-        senderId: MOCK_CURRENT_USER_ID,
-        body: "Yes! Let's meet at Woodruff Library entrance.",
-        sentAt: makeDate(-1000 * 60 * 48),
-        edited: false,
-      },
-      {
-        id: "msg-6",
-        roomId: "room-2",
-        senderId: "esuh23",
-        body: "Can someone share the exact spot?",
-        sentAt: makeDate(-1000 * 60 * 46),
-        edited: false,
-      },
+      // {
+      //   id: "msg-5",
+      //   roomId: "room-2",
+      //   senderId: MOCK_CURRENT_USER_ID,
+      //   body: "Yes! Let's meet at Woodruff Library entrance.",
+      //   sentAt: makeDate(-1000 * 60 * 48),
+      //   edited: false,
+      // },
+      // {
+      //   id: "msg-6",
+      //   roomId: "room-2",
+      //   senderId: "esuh23",
+      //   body: "Can someone share the exact spot?",
+      //   sentAt: makeDate(-1000 * 60 * 46),
+      //   edited: false,
+      // },
     ],
   },
 ];
 
-let chatroomsStore: Chatroom[] = initialChatroomsRaw.map((raw) => chatroomSchema.parse(raw));
+let chatroomsStore: Chatroom[] = initialChatroomsRaw.map((raw) => chatRoomSchema.parse(raw));
 
 const cloneChatroom = (chatroom: Chatroom): Chatroom => ({
   ...chatroom,
@@ -160,7 +160,7 @@ export const mockChatApi = {
 
   createChatroom: async (participantIds: string[] = []): Promise<string> => {
     const chatroomId = nextId();
-    const newChatroom: Chatroom = chatroomSchema.parse({
+    const newChatroom: Chatroom = chatRoomSchema.parse({
       id: chatroomId,
       updatedAt: new Date().toISOString(),
       unreadCount: 0,
@@ -196,10 +196,10 @@ export const mockChatApi = {
 
     const messageInput: ChatMessageInput = {
       id: nextId(),
-      roomId: payload.chatroomId,
-      senderId: payload.senderId,
+      room_id: payload.chatroomId,
+      sent_by: payload.senderId,
       body: payload.body,
-      sentAt: new Date().toISOString(),
+      sent_at: new Date().toISOString(),
       edited: false,
     };
 

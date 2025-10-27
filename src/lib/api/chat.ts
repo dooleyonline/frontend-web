@@ -4,7 +4,7 @@ import {
   ChatMessage,
   Chatroom,
   chatMessageSchema,
-  chatroomSchema,
+  chatRoomSchema,
   SendMessageInput,
   sendMessageInputSchema,
 } from "@/lib/types";
@@ -35,7 +35,7 @@ export type ChatroomParticipantInput = {
 
 export type UpdateMessageInput = {
   chatroomId: string;
-  messageId: string;
+  messageId: number;
   body: string;
 };
 
@@ -48,9 +48,9 @@ const parseChatroomPayload = async (
     (typeof payload === "string" && payload.trim().length === 0)
   ) {
     const fallback = await apiClient.get(`chat/${chatroomId}`);
-    return chatroomSchema.parse(fallback.data);
+    return chatRoomSchema.parse(fallback.data);
   }
-  return chatroomSchema.parse(payload);
+  return chatRoomSchema.parse(payload);
 };
 
 export const getChatrooms = (): ApiQueryOptions<Chatroom[]> => ({
@@ -66,7 +66,7 @@ export const getChatrooms = (): ApiQueryOptions<Chatroom[]> => ({
     const chatroomPayloads = await Promise.all(
       ids.map(async (id) => {
         const chatroomResponse = await apiClient.get(`chat/${id}`);
-        return chatroomSchema.parse(chatroomResponse.data);
+        return chatRoomSchema.parse(chatroomResponse.data);
       }),
     );
 
@@ -84,7 +84,7 @@ export const getChatroom = (chatroomId: string): ApiQueryOptions<Chatroom> => ({
     }
 
     const response = await apiClient.get(`chat/${chatroomId}`);
-    return chatroomSchema.parse(response.data);
+    return chatRoomSchema.parse(response.data);
   },
 });
 
