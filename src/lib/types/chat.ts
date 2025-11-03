@@ -19,22 +19,40 @@ export const chatParticipantSchema = z.object({
 export type ChatParticipant = z.infer<typeof chatParticipantSchema>;
 
 const chatMessageJsonSchema = z.object({
-  id: z.number(),
+  id: z.union([z.string(), z.number()]),
   room_id: z.string(),
   sent_by: z.string(),
   body: z.string(),
   edited: z.boolean(),
-  sent_at: z.string(),
+  sent_at: z.union([z.string(), z.null()]).optional(),
 });
 
-export const chatMessageSchema = chatMessageJsonSchema.transform((data) => ({
-  id: data.id,
-  roomID: data.room_id,
-  sentBy: data.sent_by,
-  body: data.body,
-  sentAt: new Date(data.sent_at),
-  edited: data.edited,
-}));
+export const chatMessageSchema = chatMessageJsonSchema.transform((data) => {
+  const id = typeof data.id === "number" ? data.id.toString() : data.id;
+  const chatroomId = data.room_id;
+  const senderId = data.sent_by;
+  const rawSentAt = data.sent_at;
+  let sentAt =
+    typeof rawSentAt === "string" && rawSentAt.trim().length > 0
+      ? new Date(rawSentAt)
+      : new Date();
+
+  if (!(sentAt instanceof Date) || Number.isNaN(sentAt.getTime()) || sentAt.getTime() <= 0) {
+    sentAt = new Date();
+  }
+
+  return {
+    id,
+    chatroomId,
+    roomId: chatroomId,
+    roomID: chatroomId,
+    senderId,
+    sentBy: senderId,
+    body: data.body,
+    sentAt,
+    edited: data.edited,
+  };
+});
 
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 

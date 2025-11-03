@@ -36,11 +36,15 @@ const SignInPage = () => {
     console.log(me.data);
   }, [me]);
 
-  const handleSignIn = useCallback(async (params: SignIn) => {
-    console.log("logging in");
-    const res = await queryClient.fetchQuery(api.auth.signIn(params));
-    setUser(res ?? null);
-  }, []);
+  const handleSignIn = useCallback(
+    async (params: SignIn) => {
+      console.log("logging in");
+      const res = await queryClient.fetchQuery(api.auth.signIn(params));
+      setUser(res ?? null);
+      queryClient.setQueryData(api.auth.me().queryKey, res ?? null);
+    },
+    [queryClient],
+  );
 
   console.log(user)
 

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -16,7 +16,7 @@ type MessagePaneProps = {
   chatroom?: Chatroom | null;
   currentUserId: string;
   sending: boolean;
-  onSendMessage: (body: string) => Promise<void>;
+  onSendMessage: (body: string) => Promise<boolean>;
   onBack?: () => void;
   onOpenMap?: (chatroom: Chatroom) => void;
 };
@@ -108,8 +108,10 @@ export const MessagePane = ({
     if (!content) return;
 
     try {
-      await onSendMessage(content);
-      setDraft("");
+      const success = await onSendMessage(content);
+      if (success) {
+        setDraft("");
+      }
     } catch {
       // handled upstream
     }
@@ -132,7 +134,7 @@ export const MessagePane = ({
   }
 
   return (
-    <div className="flex h-full flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b px-3 py-3">
         <Button
           type="button"
@@ -171,7 +173,7 @@ export const MessagePane = ({
 
       <div
         ref={viewportRef}
-        className="flex-1 space-y-4 overflow-y-auto px-3 py-5"
+        className="flex-1 min-h-0 max-h-[calc(100vh-280px)] space-y-4 overflow-y-auto px-3 py-5"
       >
         {sortedMessages.map((message, index) => {
           const previous = sortedMessages[index - 1];

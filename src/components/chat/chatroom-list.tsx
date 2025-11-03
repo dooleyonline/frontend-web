@@ -25,6 +25,8 @@ type ChatroomListProps = {
   isError?: boolean;
   onRetry?: () => void;
   onSelect: (chatroomId: string) => void;
+  onStartNewChat?: () => void;
+  disableNewChat?: boolean;
 };
 
 const normalize = (value: string) => value.toLowerCase().trim();
@@ -68,6 +70,8 @@ export const ChatroomList = (props: ChatroomListProps) => {
     isLoading,
     isError,
     onRetry,
+    onStartNewChat,
+    disableNewChat,
   } = props;
   const [search, setSearch] = useState("");
 
@@ -93,7 +97,13 @@ export const ChatroomList = (props: ChatroomListProps) => {
           </span>
           <h2 className="text-lg font-semibold leading-none">Messages</h2>
         </div>
-        <Button variant="ghost" size="icon">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onStartNewChat}
+          disabled={disableNewChat}
+          aria-label="Start a new chat"
+        >
           <MessageSquarePlusIcon className="h-5 w-5" />
         </Button>
       </div>
