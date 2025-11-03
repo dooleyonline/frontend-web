@@ -17,6 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import { API_BASE_URL } from "@/lib/env";
 import { ChatMessage, Chatroom, chatMessageSchema } from "@/lib/types";
@@ -65,6 +67,9 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   const [mapDialogChatroom, setMapDialogChatroom] = useState<Chatroom | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isParticipantsDialogOpen, setIsParticipantsDialogOpen] = useState(false);
+  const [participantsDialogChatroom, setParticipantsDialogChatroom] =
+    useState<Chatroom | null>(null);
   const queryClient = useQueryClient();
   const invalidAccessToastShownRef = useRef(false);
   const meQuery = useQuery(api.auth.me());
@@ -96,6 +101,23 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     isPending: isCreatingChatroom,
   } = useMutation({
     mutationFn: api.chat.createChatroom,
+  });
+  const {
+    mutateAsync: leaveChatroomAsync,
+    isPending: isLeavingChatroom,
+  } = useMutation({
+    mutationFn: async (chatroomId: string) => {
+      if (!currentUserId) {
+        throw new Error("Sign in to leave this conversation.");
+      }
+
+      await api.chat.removeParticipant({
+        chatroomId,
+        userId: currentUserId,
+      });
+
+      return chatroomId;
+    },
   });
 
   const activeChatroomSlug = useMemo(() => {
@@ -373,6 +395,54 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     ],
   );
 
+  const handleLeaveChatroom = useCallback(
+    async (chatroomId: string) => {
+      if (!chatroomId || !currentUserId) return;
+      try {
+        await leaveChatroomAsync(chatroomId);
+
+        queryClient.setQueryData<Chatroom[] | undefined>(
+          CHATROOMS_QUERY_KEY,
+          (previous) => {
+            if (!previous) return previous;
+            return previous.filter((chatroom) => chatroom.id !== chatroomId);
+          },
+        );
+
+        void refetchChatrooms();
+
+        if (activeChatroomId === chatroomId) {
+          setActiveChatroomId(null);
+          setShowListOnMobile(true);
+          setIsMapDialogOpen(false);
+          setMapDialogChatroom(null);
+          setIsParticipantsDialogOpen(false);
+          setParticipantsDialogChatroom(null);
+          if (pathname !== "/chat") {
+            router.push("/chat");
+          }
+        }
+
+        toast.success("You left the conversation.");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to leave the conversation. Please try again.",
+        );
+      }
+    },
+    [
+      activeChatroomId,
+      currentUserId,
+      leaveChatroomAsync,
+      pathname,
+      queryClient,
+      refetchChatrooms,
+      router,
+    ],
+  );
+
   const handleBackToList = () => {
     setShowListOnMobile(true);
     setIsMapDialogOpen(false);
@@ -405,6 +475,26 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     setIsMapDialogOpen(open);
     if (!open) {
       setMapDialogChatroom(null);
+    }
+  };
+
+  const handleOpenParticipantsDialog = (chatroom: Chatroom) => {
+    if (
+      !currentUserId ||
+      !chatroom.participants.some((participant) => participant.id === currentUserId)
+    ) {
+      toast.error(ACCESS_DENIED_MESSAGE);
+      return;
+    }
+
+    setParticipantsDialogChatroom(chatroom);
+    setIsParticipantsDialogOpen(true);
+  };
+
+  const handleParticipantsDialogOpenChange = (open: boolean) => {
+    setIsParticipantsDialogOpen(open);
+    if (!open) {
+      setParticipantsDialogChatroom(null);
     }
   };
 
@@ -521,10 +611,77 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
               onSendMessage={handleSendMessage}
               onBack={handleBackToList}
               onOpenMap={handleOpenMapDialog}
+              onLeaveChatroom={handleLeaveChatroom}
+              leaving={isLeavingChatroom}
+              onOpenParticipants={handleOpenParticipantsDialog}
             />
           </div>
         </div>
       </main>
+      <Dialog
+        open={isParticipantsDialogOpen}
+        onOpenChange={handleParticipantsDialogOpenChange}
+      >
+        <DialogContent className="w-full max-w-md">
+          <DialogHeader className="space-y-2">
+            <DialogTitle>Participants</DialogTitle>
+            <DialogDescription>
+              {participantsDialogChatroom
+                ? "Review the people in this conversation."
+                : "View the members of this conversation."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {participantsDialogChatroom?.participants.length ? (
+              participantsDialogChatroom.participants.map((participant) => {
+                const displayName = participant.displayName?.trim().length
+                  ? participant.displayName
+                  : participant.username ?? participant.id;
+                const initials =
+                  displayName
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map((part) => part[0] ?? "")
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase() || "?";
+                const subtitle = participant.username ?? participant.id;
+
+                return (
+                  <div
+                    key={participant.id}
+                    className="flex items-center gap-3 rounded-lg border px-3 py-2"
+                  >
+                    <Avatar className="size-10">
+                      {participant.avatarUrl ? (
+                        <AvatarImage src={participant.avatarUrl} alt={displayName} />
+                      ) : null}
+                      <AvatarFallback className="text-sm font-semibold">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {displayName}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {subtitle}
+                      </p>
+                    </div>
+                    <Button type="button" size="sm" variant="outline">
+                      Block
+                    </Button>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No participants found for this conversation.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={isMapDialogOpen} onOpenChange={handleMapDialogOpenChange}>
         <DialogContent className="flex h-[min(95svh,820px)] w-full max-w-[calc(100vw-3rem)] flex-col overflow-hidden p-0 sm:max-w-[min(1200px,95vw)]">
           <DialogHeader className="space-y-2 px-6 pb-4 pt-6">

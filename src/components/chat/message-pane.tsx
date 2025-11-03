@@ -2,7 +2,15 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
-import { ArrowLeftIcon, ImageIcon, MapIcon, SmileIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  BellRingIcon,
+  ImageIcon,
+  InfoIcon,
+  LogOutIcon,
+  MapIcon,
+  SmileIcon,
+} from "lucide-react";
 
 import { buildChatroomTitle } from "@/lib/chat/title";
 import { ChatMessage, Chatroom } from "@/lib/types";
@@ -11,6 +19,12 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 type MessagePaneProps = {
   chatroom?: Chatroom | null;
@@ -19,6 +33,9 @@ type MessagePaneProps = {
   onSendMessage: (body: string) => Promise<boolean>;
   onBack?: () => void;
   onOpenMap?: (chatroom: Chatroom) => void;
+  onLeaveChatroom?: (chatroomId: string) => Promise<void> | void;
+  leaving?: boolean;
+  onOpenParticipants?: (chatroom: Chatroom) => void;
 };
 
 export const MessagePane = ({
@@ -28,6 +45,9 @@ export const MessagePane = ({
   onSendMessage,
   onBack,
   onOpenMap,
+  onLeaveChatroom,
+  leaving = false,
+  onOpenParticipants,
 }: MessagePaneProps) => {
   const [draft, setDraft] = useState("");
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -117,6 +137,16 @@ export const MessagePane = ({
     }
   };
 
+  const handleLeaveChat = () => {
+    if (!chatroom || !onLeaveChatroom) return;
+    void onLeaveChatroom(chatroom.id);
+  };
+
+  const handleOpenParticipants = () => {
+    if (!chatroom || !onOpenParticipants) return;
+    onOpenParticipants(chatroom);
+  };
+
   if (!chatroom) {
     return (
       <div className="flex h-full flex-1 flex-col items-center justify-center px-6 text-center text-sm text-muted-foreground">
@@ -169,12 +199,45 @@ export const MessagePane = ({
             {conversationSubtitle}
           </span>
         </div>
+        {onLeaveChatroom || onOpenParticipants ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="ml-auto"
+              >
+                <InfoIcon className="h-5 w-5" />
+                <span className="sr-only">Chat info</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              {onOpenParticipants ? (
+                <DropdownMenuItem onSelect={handleOpenParticipants}>
+                  Participants
+                </DropdownMenuItem>
+              ) : null}
+              {onLeaveChatroom ? (
+                <DropdownMenuItem
+                  onSelect={handleLeaveChat}
+                  variant="destructive"
+                  disabled={leaving}
+                >
+                  <LogOutIcon className="h-4 w-4" />
+                  Leave chat
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </header>
 
       <div
         ref={viewportRef}
         className="flex-1 min-h-0 max-h-[calc(100vh-280px)] space-y-4 overflow-y-auto px-3 py-5"
       >
+        <SystemNotice message="Avoid meeting in places without an emergency (the blue) tower." />
         {sortedMessages.map((message, index) => {
           const previous = sortedMessages[index - 1];
           const isOwn = message.senderId === currentUserId;
@@ -235,6 +298,17 @@ export const MessagePane = ({
           Send
         </Button>
       </form>
+    </div>
+  );
+};
+
+const SystemNotice = ({ message }: { message: string }) => {
+  return (
+    <div className="flex justify-center">
+      <div className="flex max-w-[80%] items-start gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-700 shadow-sm dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-100">
+        <BellRingIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-200" />
+        <span className="whitespace-pre-line leading-relaxed">{message}</span>
+      </div>
     </div>
   );
 };
