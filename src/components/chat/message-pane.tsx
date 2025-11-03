@@ -5,16 +5,21 @@ import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeftIcon,
   BellRingIcon,
+  ExternalLinkIcon,
   ImageIcon,
   InfoIcon,
   LogOutIcon,
   MapIcon,
+  MapPinIcon,
   SmileIcon,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import { buildChatroomTitle } from "@/lib/chat/title";
-import { ChatMessage, Chatroom } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { buildGoogleStaticMapUrl, extractLinkPreviewCandidate } from "@/lib/chat/link-preview";
+import api from "@/lib/api";
+import { ChatMessage, Chatroom, Item } from "@/lib/types";
+import { cn, formatPrice } from "@/lib/utils";
 
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Button } from "../ui/button";
@@ -25,6 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { Skeleton } from "../ui/skeleton";
 
 type MessagePaneProps = {
   chatroom?: Chatroom | null;
@@ -357,13 +363,16 @@ const MessageBubble = ({
       <div className="flex max-w-[75%] flex-col gap-1">
         <div
           className={cn(
-            "rounded-2xl px-4 py-2 text-sm shadow-sm whitespace-pre-line",
+            "flex flex-col gap-2 rounded-2xl px-4 py-2 text-sm shadow-sm",
             isOwn
               ? "ml-auto bg-primary text-primary-foreground"
               : "bg-muted text-foreground",
           )}
         >
-          {message.body}
+          <span className="whitespace-pre-line break-words">
+            {message.body}
+          </span>
+          <MessageLinkPreview message={message} isOwn={isOwn} />
         </div>
         <span
           className={cn(
@@ -375,5 +384,279 @@ const MessageBubble = ({
         </span>
       </div>
     </div>
+  );
+};
+
+type ProductPreviewState =
+  | {
+      kind: "product";
+      status: "loading";
+      url: string;
+      itemId: string;
+    }
+  | {
+      kind: "product";
+      status: "error";
+      url: string;
+      itemId: string;
+    }
+  | {
+      kind: "product";
+      status: "success";
+      url: string;
+      itemId: string;
+      item: Item;
+    };
+
+type MapPreviewState = {
+  kind: "google-map";
+  status: "success";
+  url: string;
+  label: string;
+  staticMapUrl: string | null;
+};
+
+type MessagePreviewState = ProductPreviewState | MapPreviewState | null;
+
+const ensureAbsoluteUrl = (value: string): string => {
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+  if (value.startsWith("www.")) {
+    return `https://${value}`;
+  }
+  return value;
+};
+
+const useMessageLinkPreview = (message: ChatMessage): MessagePreviewState => {
+  const candidate = useMemo(
+    () => extractLinkPreviewCandidate(message.body),
+    [message.body],
+  );
+
+  const productItemId =
+    candidate?.kind === "product" ? candidate.itemId : null;
+
+  const productQueryOptions = useMemo(
+    () => (productItemId ? api.item.get(productItemId) : null),
+    [productItemId],
+  );
+
+  const productQuery = useQuery<Item | null>({
+    ...(productQueryOptions ?? {
+      queryKey: ["chat", "preview", "product", "noop"],
+      queryFn: async () => null,
+    }),
+    enabled: Boolean(productItemId),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  return useMemo(() => {
+    if (!candidate) return null;
+
+    if (candidate.kind === "product") {
+      if (productQuery.isLoading) {
+        return {
+          kind: "product",
+          status: "loading",
+          url: ensureAbsoluteUrl(candidate.url),
+          itemId: candidate.itemId,
+        };
+      }
+
+      if (productQuery.isError || !productQuery.data) {
+        return {
+          kind: "product",
+          status: "error",
+          url: ensureAbsoluteUrl(candidate.url),
+          itemId: candidate.itemId,
+        };
+      }
+
+      return {
+        kind: "product",
+        status: "success",
+        url: ensureAbsoluteUrl(candidate.url),
+        itemId: candidate.itemId,
+        item: productQuery.data,
+      };
+    }
+
+    if (candidate.kind === "google-map") {
+      return {
+        kind: "google-map",
+        status: "success",
+        url: ensureAbsoluteUrl(candidate.url),
+        label: candidate.label,
+        staticMapUrl: buildGoogleStaticMapUrl(
+          candidate.query,
+          candidate.center,
+        ),
+      };
+    }
+
+    return null;
+  }, [candidate, productQuery.data, productQuery.isError, productQuery.isLoading]);
+};
+
+const MessageLinkPreview = ({
+  message,
+  isOwn,
+}: {
+  message: ChatMessage;
+  isOwn: boolean;
+}) => {
+  const preview = useMessageLinkPreview(message);
+  if (!preview) return null;
+
+  if (preview.kind === "product") {
+    if (preview.status === "loading") {
+      return (
+        <div
+          className={cn(
+            "rounded-xl border border-dashed p-3",
+            isOwn
+              ? "border-primary-foreground/40 bg-primary-foreground/60"
+              : "border-border/60 bg-background/60",
+          )}
+        >
+          <Skeleton className="h-16 w-full rounded-md" />
+        </div>
+      );
+    }
+
+    if (preview.status === "error") {
+      return (
+        <div
+          className={cn(
+            "rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs",
+            isOwn ? "text-primary" : "text-destructive",
+          )}
+        >
+          Unable to load item preview
+        </div>
+      );
+    }
+
+    return (
+      <ProductPreviewCard
+        item={preview.item}
+        url={preview.url}
+        isOwn={isOwn}
+      />
+    );
+  }
+
+  if (preview.kind === "google-map") {
+    return (
+      <MapPreviewCard
+        label={preview.label}
+        url={preview.url}
+        staticMapUrl={preview.staticMapUrl}
+        isOwn={isOwn}
+      />
+    );
+  }
+
+  return null;
+};
+
+const ProductPreviewCard = ({
+  item,
+  url,
+  isOwn,
+}: {
+  item: Item;
+  url: string;
+  isOwn: boolean;
+}) => {
+  const imageSrc = item.images[0] ?? "";
+  const priceLabel = formatPrice(item.price);
+  const mutedTextClass = isOwn ? "text-primary/70" : "text-muted-foreground";
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "block overflow-hidden rounded-xl border transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        isOwn
+          ? "border-primary-foreground/40 bg-primary-foreground text-primary ring-offset-primary"
+          : "border-border bg-background text-foreground ring-offset-background",
+      )}
+    >
+      <div className="flex items-center gap-3 p-3">
+        <div className="h-16 w-16 overflow-hidden rounded-lg bg-muted">
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt={item.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-xs font-medium text-muted-foreground">
+              No image
+            </div>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="line-clamp-2 text-sm font-semibold">
+            {item.name}
+          </span>
+          <span className={cn("text-xs font-medium", mutedTextClass)}>
+            {priceLabel}
+            {item.isNegotiable ? " • Negotiable" : ""}
+          </span>
+          <span
+            className={cn(
+              "flex items-center gap-1 text-xs font-semibold",
+              isOwn ? "text-primary" : "text-foreground",
+            )}
+          >
+            View item
+            <ExternalLinkIcon className="h-3.5 w-3.5" />
+          </span>
+        </div>
+      </div>
+    </a>
+  );
+};
+
+const MapPreviewCard = ({
+  url,
+  label,
+  staticMapUrl,
+  isOwn,
+}: {
+  url: string;
+  label: string;
+  staticMapUrl: string | null;
+  isOwn: boolean;
+}) => {
+  const cardClasses = cn(
+    "overflow-hidden rounded-xl border transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+    isOwn
+      ? "border-primary-foreground/40 bg-primary-foreground text-primary ring-offset-primary"
+      : "border-border bg-background text-foreground ring-offset-background",
+  );
+
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className={cardClasses}>
+      {staticMapUrl ? (
+        <img src={staticMapUrl} alt={label} className="h-32 w-full object-cover" />
+      ) : (
+        <div className="flex h-32 w-full items-center justify-center bg-muted text-xs">
+          Map preview unavailable
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
+        <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+          <MapPinIcon className="h-4 w-4 shrink-0" />
+          <span className="line-clamp-2">{label}</span>
+        </span>
+        <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0" />
+      </div>
+    </a>
   );
 };
