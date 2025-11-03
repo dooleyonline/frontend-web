@@ -29,3 +29,13 @@ export const signIn = (params: SignIn): ApiQueryOptions<User> => {
     },
   };
 };
+
+export const signOut = (): ApiQueryOptions<void> => {
+  const url = "auth/logout";
+  return {
+    queryKey: [url],
+    queryFn: async () => {
+      await apiClient.post(url);
+    },
+  };
+};

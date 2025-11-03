@@ -67,7 +67,7 @@ export function Sidebar({ ...props }: ComponentProps<typeof SidebarComponent>) {
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser />
       </SidebarFooter>
     </SidebarComponent>
   );

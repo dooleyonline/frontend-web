@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -10,39 +9,35 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { LoadingButton } from "@/components/ui/loading-button";
+import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
-import { apiClient } from "@/lib/api/shared";
-import { SignIn, User, signInSchema, userSchema } from "@/lib/types";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { serverQuery } from "@/lib/api/shared";
+import { SignIn } from "@/lib/types";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 
 const SignInPage = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const me = useQuery(api.auth.me());
-  const queryClient = useQueryClient();
+  const router = useRouter();
+  const { user, revalidate } = useUser();
   const form = useForm<SignIn>({
-    resolver: zodResolver(signInSchema),
     defaultValues: {
       email: "",
       password: "",
     },
   });
 
-  useEffect(() => {
-    if (me.error) console.error(me.error);
-    setUser(me.data ?? null);
-    console.log(me.data);
-  }, [me]);
-
-  const handleSignIn = useCallback(async (params: SignIn) => {
-    console.log("logging in");
-    const res = await queryClient.fetchQuery(api.auth.signIn(params));
-    setUser(res ?? null);
-  }, []);
-
-  console.log(user)
+  const handleSignIn = async (params: SignIn) => {
+    const { error } = await serverQuery(api.auth.signIn(params));
+    if (error) {
+      toast.error("Failed to sign in", {
+        description: "Please try again later",
+      });
+    }
+    await revalidate();
+    router.replace("/");
+  };
 
   return (
     <main className="flex items-center justify-center h-full relative">
@@ -89,13 +84,14 @@ const SignInPage = () => {
                   </FormItem>
                 )}
               />
-              <Button
+              <LoadingButton
                 type="submit"
                 disabled={user !== null || !form.formState.isValid}
+                isLoading={form.formState.isSubmitting}
                 className="w-full"
               >
                 {user ? `Signed in as ${user.email}` : "Sign In"}
-              </Button>
+              </LoadingButton>
             </form>
           </Form>
         </div>

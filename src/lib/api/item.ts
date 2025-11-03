@@ -2,7 +2,6 @@ import {
   Item,
   ItemCreateSchema,
   ItemSearchParams,
-  PresignSchema,
   itemCreateJsonSchema,
   itemSchema,
   presignSchema,
