@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeftIcon,
@@ -55,8 +56,23 @@ export const MessagePane = ({
   leaving = false,
   onOpenParticipants,
 }: MessagePaneProps) => {
-  const [draft, setDraft] = useState("");
+  const [draftsByChatroom, setDraftsByChatroom] = useState<Record<string, string>>({});
   const viewportRef = useRef<HTMLDivElement>(null);
+  const currentChatroomId = chatroom?.id ?? null;
+  const draft =
+    currentChatroomId && draftsByChatroom[currentChatroomId] !== undefined
+      ? draftsByChatroom[currentChatroomId]
+      : "";
+
+  const updateDraft = (value: string) => {
+    if (!currentChatroomId) return;
+    setDraftsByChatroom((previous) => {
+      if (previous[currentChatroomId] === value) {
+        return previous;
+      }
+      return { ...previous, [currentChatroomId]: value };
+    });
+  };
 
   const otherParticipants = useMemo(
     () =>
@@ -117,10 +133,6 @@ export const MessagePane = ({
     el.scrollTop = el.scrollHeight;
   }, [sortedMessages.length, chatroom?.id]);
 
-  useEffect(() => {
-    setDraft("");
-  }, [chatroom?.id]);
-
   const handleOpenMap = () => {
     if (chatroom && onOpenMap) {
       onOpenMap(chatroom);
@@ -136,7 +148,7 @@ export const MessagePane = ({
     try {
       const success = await onSendMessage(content);
       if (success) {
-        setDraft("");
+        updateDraft("");
       }
     } catch {
       // handled upstream
@@ -286,7 +298,7 @@ export const MessagePane = ({
         <div className="relative flex-1">
           <Input
             value={draft}
-            onChange={(event) => setDraft(event.currentTarget.value)}
+            onChange={(event) => updateDraft(event.currentTarget.value)}
             placeholder="Message..."
             className="h-11 rounded-full bg-muted px-4 text-sm"
             disabled={sending}
@@ -587,12 +599,15 @@ const ProductPreviewCard = ({
       )}
     >
       <div className="flex items-center gap-3 p-3">
-        <div className="h-16 w-16 overflow-hidden rounded-lg bg-muted">
+        <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-muted">
           {imageSrc ? (
-            <img
+            <Image
               src={imageSrc}
               alt={item.name}
-              className="h-full w-full object-cover"
+              fill
+              sizes="64px"
+              className="object-cover"
+              unoptimized
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-xs font-medium text-muted-foreground">
@@ -644,7 +659,16 @@ const MapPreviewCard = ({
   return (
     <a href={url} target="_blank" rel="noreferrer" className={cardClasses}>
       {staticMapUrl ? (
-        <img src={staticMapUrl} alt={label} className="h-32 w-full object-cover" />
+        <div className="relative h-32 w-full">
+          <Image
+            src={staticMapUrl}
+            alt={label}
+            fill
+            sizes="(max-width: 768px) 100vw, 384px"
+            className="object-cover"
+            unoptimized
+          />
+        </div>
       ) : (
         <div className="flex h-32 w-full items-center justify-center bg-muted text-xs">
           Map preview unavailable

@@ -204,7 +204,7 @@ export const CreateChatroomDialog = ({
 
             {showEmptyState ? (
               <p className="text-sm text-muted-foreground">
-                No people match "{search}".
+                No people match &quot;{search}&quot;.
               </p>
             ) : null}
 

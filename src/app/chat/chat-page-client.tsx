@@ -323,6 +323,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     },
     [
       createChatroomAsync,
+      currentUserId,
       refetchChatrooms,
       router,
       pathname,

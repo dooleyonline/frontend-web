@@ -7,7 +7,6 @@ import {
   SendMessageInput,
   chatMessageSchema,
   chatParticipantSchema,
-  chatRoomSchema,
   sendMessageInputSchema,
   userSchema,
   User,
@@ -437,7 +436,6 @@ export const sendMessage = async (
 };
 
 export const updateMessage = async ({
-  chatroomId,
   messageId,
   body,
 }: UpdateMessageInput): Promise<ChatMessage> => {

@@ -26,37 +26,41 @@ const ItemCarousel = memo((props: ItemCarouselProps) => {
 
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
-  const [count, setCount] = useState(0);
+  const itemId = item?.id ?? null;
+  const imageCount = item?.images.length ?? 0;
 
   useEffect(() => {
-    if (!api || !item) return;
+    if (!api || !itemId) return;
 
     api.scrollTo(0);
-    setCount(item.images.length);
-    setCurrent(api.selectedScrollSnap());
-
-    api.on("select", () => {
+    const handleSelect = () => {
       setCurrent(api.selectedScrollSnap());
-    });
-  }, [api, item?.images.length, item]);
+    };
+
+    api.on("select", handleSelect);
+
+    return () => {
+      api.off("select", handleSelect);
+    };
+  }, [api, itemId]);
 
   const handleClick = () => {
     if (!api) return;
-    if (current === count - 1) api.scrollTo(0);
+    if (current === imageCount - 1) api.scrollTo(0);
     else api.scrollNext();
   };
 
   return (
-    <Carousel setApi={setApi}>
+    <Carousel key={itemId ?? "empty"} setApi={setApi}>
       <CarouselContent className="@container">
-        {isLoading || item!.images.length === 0 ? ( // non-null assertion since isLoading is true when item is falsy
+        {isLoading || imageCount === 0 ? (
           <CarouselItem className="@xl:basis-1/2 @2xl:basis-1/3">
             <AspectRatio ratio={1 / 1} className="rounded-lg w-full">
               <Skeleton className="size-full" />
             </AspectRatio>
           </CarouselItem>
         ) : (
-          item!.images.map((image, index) => (
+          (item?.images ?? []).map((image, index) => (
             <CarouselItem key={index} className="@xl:basis-1/2 @2xl:basis-1/3">
               <AspectRatio
                 ratio={1 / 1}
@@ -84,7 +88,7 @@ const ItemCarousel = memo((props: ItemCarouselProps) => {
           onClick={handleClick}
           className="py-2 flex gap-1 items-center cursor-pointer"
         >
-          {[...Array(count)].map((_, i) => (
+          {Array.from({ length: imageCount }).map((_, i) => (
             <motion.div
               key={i}
               animate={

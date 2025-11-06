@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Item } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
 import ItemCard from "../item-card";
 
@@ -12,30 +12,19 @@ type ItemGalleryUIProps = {
 
 export const ItemGalleryUI = ({ data }: ItemGalleryUIProps) => {
   const [selected, setSelected] = useState<"all" | string>("all");
-  const [subcategories, setSubcategories] = useState<[string, number][]>([]);
-  const [filteredData, setFilteredData] = useState<Item[] | null>(data);
+  const subcategories = useMemo<[string, number][]>(() => {
+    if (!data) return [];
+    const map = new Map<string, number>();
+    data.forEach((item) => {
+      map.set(item.subcategory, (map.get(item.subcategory) ?? 0) + 1);
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [data]);
 
-  useEffect(() => {
-    if (data) {
-      const map = new Map<string, number>();
-      data.forEach((item) => {
-        if (map.has(item.subcategory)) {
-          map.set(item.subcategory, map.get(item.subcategory)! + 1);
-        } else {
-          map.set(item.subcategory, 1);
-        }
-      });
-
-      const sorted = [...map.entries()].sort((a, b) => b[1] - a[1]);
-
-      setSubcategories(sorted);
-
-      if (selected === "all") {
-        setFilteredData(data);
-      } else {
-        setFilteredData(data.filter((item) => item.subcategory === selected));
-      }
-    }
+  const filteredData = useMemo(() => {
+    if (!data) return null;
+    if (selected === "all") return data;
+    return data.filter((item) => item.subcategory === selected);
   }, [data, selected]);
 
   if (!data || data.length === 0) {

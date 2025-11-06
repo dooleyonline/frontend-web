@@ -3,7 +3,7 @@
 import { Loader } from "lucide-react";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import dynamic from "next/dynamic";
-import { memo } from "react";
+import { ComponentType, memo } from "react";
 
 type DynamicIconProps = {
   name: string;
@@ -11,21 +11,26 @@ type DynamicIconProps = {
   [key: string]: unknown;
 };
 
-const DynamicIcon = memo(({ name, ...props }: DynamicIconProps) => {
-  if (!(name in dynamicIconImports)) {
+type DynamicIconComponent = ComponentType<Omit<DynamicIconProps, "name">>;
+
+const dynamicIconComponents = Object.fromEntries(
+  Object.entries(dynamicIconImports).map(([iconName, importFn]) => [
+    iconName,
+    dynamic(importFn, {
+      ssr: true,
+      loading: () => <Loader className="h-4 w-4 animate-spin" />,
+    }),
+  ]),
+) as Record<string, DynamicIconComponent>;
+
+const DynamicIcon = memo(({ name, className, ...props }: DynamicIconProps) => {
+  const IconComponent = dynamicIconComponents[name];
+  if (!IconComponent) {
     console.error(`Icon "${name}" not found in dynamicIconImports.`);
-    return <Loader className={props.className} />;
+    return <Loader className={`${className ?? ""} animate-spin`} />;
   }
 
-  const Icon = dynamic(
-    dynamicIconImports[name as keyof typeof dynamicIconImports],
-    {
-      ssr: true,
-      loading: () => <Loader className={`${props.className} animate-spin`} />,
-    }
-  );
-
-  return <Icon {...props} />;
+  return <IconComponent className={className} {...props} />;
 });
 DynamicIcon.displayName = "DynamicIcon";
 

@@ -11,15 +11,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import api from "@/lib/api";
-import { apiClient } from "@/lib/api/shared";
-import { SignIn, User, signInSchema, userSchema } from "@/lib/types";
+import { SignIn, signInSchema } from "@/lib/types";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 const SignInPage = () => {
-  const [user, setUser] = useState<User | null>(null);
   const me = useQuery(api.auth.me());
   const queryClient = useQueryClient();
   const form = useForm<SignIn>({
@@ -32,21 +30,17 @@ const SignInPage = () => {
 
   useEffect(() => {
     if (me.error) console.error(me.error);
-    setUser(me.data ?? null);
-    console.log(me.data);
-  }, [me]);
+  }, [me.error]);
+
+  const currentUser = me.data ?? null;
 
   const handleSignIn = useCallback(
     async (params: SignIn) => {
-      console.log("logging in");
       const res = await queryClient.fetchQuery(api.auth.signIn(params));
-      setUser(res ?? null);
       queryClient.setQueryData(api.auth.me().queryKey, res ?? null);
     },
     [queryClient],
   );
-
-  console.log(user)
 
   return (
     <main className="flex items-center justify-center h-full relative">
@@ -95,10 +89,10 @@ const SignInPage = () => {
               />
               <Button
                 type="submit"
-                disabled={user !== null || !form.formState.isValid}
+                disabled={currentUser !== null || !form.formState.isValid}
                 className="w-full"
               >
-                {user ? `Signed in as ${user.email}` : "Sign In"}
+                {currentUser ? `Signed in as ${currentUser.email}` : "Sign In"}
               </Button>
             </form>
           </Form>
