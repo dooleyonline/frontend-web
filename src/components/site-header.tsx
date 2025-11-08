@@ -5,7 +5,7 @@ import { useIsMobile } from "@/hooks/ui";
 import { ArrowRightIcon, ChevronLeftIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { memo, useEffect, useState } from "react";
+import { memo, useState } from "react";
 
 import GridDistortion from "./ui/grid-distortion";
 
@@ -16,6 +16,10 @@ type SiteHeaderProps = {
 const SiteHeader = ({ isExpanded = false }: SiteHeaderProps) => {
   const isMobile = useIsMobile();
   const searchParams = useSearchParams();
+  const qParam = searchParams.get("q");
+  const categoryParam = searchParams.get("category");
+  const initialInput = `${categoryParam ? `#${categoryParam}` : ""}${qParam ? ` ${qParam}` : ""}`;
+  const searchBarKey = `${categoryParam ?? ""}-${qParam ?? ""}`;
 
   return (
     <header
@@ -64,8 +68,9 @@ const SiteHeader = ({ isExpanded = false }: SiteHeaderProps) => {
       )}
 
       <SearchBar
+        key={searchBarKey}
         isExpanded={isExpanded}
-        searchParams={searchParams}
+        initialInput={initialInput}
         searchPlaceholder="Search for anything ..."
         className="relative z-10"
       />
@@ -76,7 +81,7 @@ const SiteHeader = ({ isExpanded = false }: SiteHeaderProps) => {
 type SearchBarProps = {
   isExpanded: boolean;
   searchPlaceholder: string;
-  searchParams: URLSearchParams;
+  initialInput: string;
   className?: string;
 };
 
@@ -99,13 +104,11 @@ const SearchBar = memo(
     searchPlaceholder,
     isExpanded,
     className,
-    searchParams,
+    initialInput,
   }: SearchBarProps) => {
     const router = useRouter();
 
-    const q = searchParams.get("q");
-    const category = searchParams.get("category");
-    const [input, setInput] = useState("");
+    const [input, setInput] = useState(initialInput);
 
     const handleSearch = (e: React.FormEvent) => {
       e.preventDefault();
@@ -117,10 +120,6 @@ const SearchBar = memo(
       setInput("");
       router.back();
     };
-
-    useEffect(() => {
-      setInput(`${category ? `#${category}` : ""}${q ? ` ${q}` : ""}`);
-    }, [q, category]);
 
     return (
       <div className={`${className ?? ""} flex items-center w-full`}>

@@ -43,6 +43,48 @@ const PALETTE = {
   label: '#263238',
 };
 
+class ResetControl implements IControl {
+  private mapInstance?: MapLibreMap;
+  private container: HTMLElement | null = null;
+  private readonly onReset: () => void;
+
+  constructor(onReset: () => void) {
+    this.onReset = onReset;
+  }
+
+  onAdd(map: MapLibreMap): HTMLElement {
+    this.mapInstance = map;
+
+    const container = document.createElement('div');
+    container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.title = 'Reset View';
+    button.textContent = 'Reset';
+    button.style.fontSize = '14px';
+    button.style.lineHeight = '18px';
+    button.style.cursor = 'pointer';
+    button.onclick = this.onReset;
+
+    container.appendChild(button);
+    this.container = container;
+    return container;
+  }
+
+  onRemove(): void {
+    if (this.container?.parentNode) {
+      this.container.parentNode.removeChild(this.container);
+    }
+    this.container = null;
+    this.mapInstance = undefined;
+  }
+
+  getDefaultPosition(): ControlPosition {
+    return 'top-left';
+  }
+}
+
 export type CampusMapProps = {
   initialCenter?: [number, number];
   initialZoom?: number;
@@ -446,47 +488,6 @@ export function CampusMap({
 
           map.easeTo({ center: resolvedCenter, zoom: effectiveZoomRef.current, duration: 600 });
         };
-
-        class ResetControl implements IControl {
-          private _map?: MapLibreMap;
-          private _container!: HTMLElement;
-          private readonly _onReset: () => void;
-
-          constructor(onReset: () => void) {
-            this._onReset = onReset;
-          }
-
-          onAdd(mapInstance: MapLibreMap): HTMLElement {
-            this._map = mapInstance;
-
-            const container = document.createElement('div');
-            container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
-
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.title = 'Reset View';
-            button.textContent = 'Reset';
-            button.style.fontSize = '14px';
-            button.style.lineHeight = '18px';
-            button.style.cursor = 'pointer';
-            button.onclick = this._onReset;
-
-            container.appendChild(button);
-            this._container = container;
-            return this._container;
-          }
-
-          onRemove(): void {
-            if (this._container?.parentNode) {
-              this._container.parentNode.removeChild(this._container);
-            }
-            this._map = undefined;
-          }
-
-          getDefaultPosition(): ControlPosition {
-            return 'top-left';
-          }
-        }
 
         map.addControl(new ResetControl(resetView), 'top-left');
         map.once('idle', () => map.resize());

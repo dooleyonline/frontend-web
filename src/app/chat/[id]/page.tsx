@@ -1,11 +1,8 @@
 import ChatPageClient from "../chat-page-client";
 
-type ChatroomPageProps = {
-  params: Promise<{ id: string }>;
-};
-
-const ChatroomPage = async ({ params }: ChatroomPageProps) => {
+const ChatroomPage = async ({ params }: PageProps<"/chat/[id]">) => {
   const { id } = await params;
+
   return <ChatPageClient initialChatroomSlug={id} />;
 };
 

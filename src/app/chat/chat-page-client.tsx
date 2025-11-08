@@ -1,12 +1,13 @@
-
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePathname, useRouter } from "next/navigation";
+import useWebSocket, { ReadyState } from "react-use-websocket";
 
 import { MessagePane, ChatroomList } from "@/components/chat";
+import { CreateChatroomDialog } from "@/components/chat/create-chatroom-dialog";
 import { CampusMapWrapper } from "@/components/map/map-wrapper";
 import type { SelectedSpot } from "@/components/map/map";
 import {
@@ -16,15 +17,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
-import { MOCK_CURRENT_USER_ID } from "@/lib/api/chat";
-import { Chatroom } from "@/lib/types";
+import { API_BASE_URL } from "@/lib/env";
+import { ChatMessage, Chatroom, chatMessageSchema } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const CHATROOMS_QUERY_KEY = ["chat", "chatrooms"] as const;
 const ACCESS_DENIED_MESSAGE = "You do not have access to this conversation.";
 const CHATROOM_NOT_FOUND_MESSAGE = "Conversation not found.";
 const CHATROOM_ID_PREFIX = "room-";
+
+const removeTrailingSlash = (value: string) =>
+  value.endsWith("/") ? value.slice(0, -1) : value;
+
+const ensureWebSocketBaseUrl = () => {
+  if (!API_BASE_URL || API_BASE_URL.length === 0) {
+    throw new Error("NEXT_PUBLIC_API_BASE_URL must be defined for chat WebSocket connection.");
+  }
+
+  return removeTrailingSlash(API_BASE_URL);
+};
+
+const WS_BASE_URL = ensureWebSocketBaseUrl();
 
 const getChatroomSlug = (chatroomId: string) => {
   if (chatroomId.startsWith(CHATROOM_ID_PREFIX)) {
@@ -41,7 +57,6 @@ type ChatPageClientProps = {
 };
 
 const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => {
-  const currentUserId = MOCK_CURRENT_USER_ID;
   const router = useRouter();
   const pathname = usePathname();
   const [activeChatroomId, setActiveChatroomId] = useState<string | null>(null);
@@ -50,27 +65,81 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   );
   const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
   const [mapDialogChatroom, setMapDialogChatroom] = useState<Chatroom | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [isParticipantsDialogOpen, setIsParticipantsDialogOpen] = useState(false);
+  const [participantsDialogChatroom, setParticipantsDialogChatroom] =
+    useState<Chatroom | null>(null);
   const queryClient = useQueryClient();
   const invalidAccessToastShownRef = useRef(false);
+  const meQuery = useQuery(api.auth.me());
+  const currentUserId = meQuery.data?.id ?? null;
 
-  const chatroomListQuery = useQuery(api.chat.getChatrooms());
+  const chatroomsQueryOptions = api.chat.getChatrooms();
+  const chatroomListQuery = useQuery({
+    ...chatroomsQueryOptions,
+    enabled: Boolean(currentUserId),
+  });
   const allChatrooms = useMemo(
     () => chatroomListQuery.data ?? [],
     [chatroomListQuery.data],
   );
   const chatrooms = useMemo(
     () =>
-      allChatrooms.filter((chatroom) =>
-        chatroom.participants.some((participant) => participant.id === currentUserId),
-      ),
+      currentUserId
+        ? allChatrooms.filter((chatroom) =>
+            chatroom.participants.some((participant) => participant.id === currentUserId),
+          )
+        : [],
     [allChatrooms, currentUserId],
   );
+  const chatroomListFetched = chatroomListQuery.isFetched && Boolean(currentUserId);
+  const refetchChatrooms = chatroomListQuery.refetch;
+
+  const {
+    mutateAsync: createChatroomAsync,
+    isPending: isCreatingChatroom,
+  } = useMutation({
+    mutationFn: api.chat.createChatroom,
+  });
+  const {
+    mutateAsync: leaveChatroomAsync,
+    isPending: isLeavingChatroom,
+  } = useMutation({
+    mutationFn: async (chatroomId: string) => {
+      if (!currentUserId) {
+        throw new Error("Sign in to leave this conversation.");
+      }
+
+      await api.chat.removeParticipant({
+        chatroomId,
+        userId: currentUserId,
+      });
+
+      return chatroomId;
+    },
+  });
+
+  const activeChatroomSlug = useMemo(() => {
+    if (!activeChatroomId) return null;
+    return getChatroomSlug(activeChatroomId);
+  }, [activeChatroomId]);
+
+  const webSocketUrl = useMemo(() => {
+    if (!activeChatroomSlug) return null;
+    return `${WS_BASE_URL}/chat/${activeChatroomSlug}/ws`;
+  }, [activeChatroomSlug]);
+
+  const { sendMessage, lastMessage, readyState } = useWebSocket(webSocketUrl, {
+    shouldReconnect: () => true,
+    reconnectInterval: 2000,
+  });
 
   useEffect(() => {
     invalidAccessToastShownRef.current = false;
   }, [initialChatroomSlug]);
   useEffect(() => {
-    if (!chatroomListQuery.isFetched) {
+    if (!chatroomListFetched || !currentUserId) {
       return;
     }
 
@@ -153,7 +222,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   }, [
     activeChatroomId,
     allChatrooms,
-    chatroomListQuery.isFetched,
+    chatroomListFetched,
     currentUserId,
     initialChatroomSlug,
     pathname,
@@ -161,38 +230,110 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     showListOnMobile,
   ]);
 
+  useEffect(() => {
+    if (!lastMessage || !currentUserId) return;
+
+    let parsed: ChatMessage;
+
+    try {
+      const payload = JSON.parse(lastMessage.data);
+      const result = chatMessageSchema.safeParse(payload);
+      if (!result.success) {
+        console.error("Failed to parse chat message payload from WebSocket.", result.error);
+        return;
+      }
+      parsed = result.data;
+    } catch (error) {
+      console.error("Invalid WebSocket message received for chat.", error);
+      return;
+    }
+
+    let handled = false;
+
+    queryClient.setQueryData<Chatroom[]>(CHATROOMS_QUERY_KEY, (previous) => {
+      if (!previous) return previous;
+
+      const index = previous.findIndex((chatroom) => chatroom.id === parsed.chatroomId);
+      if (index === -1) {
+        return previous;
+      }
+
+      const target = previous[index];
+      if (target.messages.some((message) => message.id === parsed.id)) {
+        return previous;
+      }
+
+      handled = true;
+      const isOwnMessage = parsed.senderId === currentUserId;
+      const isActiveRoom = target.id === activeChatroomId;
+
+      const updatedChatroom: Chatroom = {
+        ...target,
+        messages: [...target.messages, parsed],
+        updatedAt: parsed.sentAt,
+        unreadCount:
+          isOwnMessage || isActiveRoom ? 0 : target.unreadCount + 1,
+      };
+
+      const next = [...previous];
+      next[index] = updatedChatroom;
+
+      return next.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    });
+
+    if (!handled && chatroomListFetched) {
+      void refetchChatrooms();
+    }
+  }, [
+    lastMessage,
+    queryClient,
+    currentUserId,
+    activeChatroomId,
+    chatroomListFetched,
+    refetchChatrooms,
+  ]);
+
+  const handleCreateChatroom = useCallback(
+    async (participantIds: string[]) => {
+      try {
+        const uniqueParticipantIds = Array.from(
+          new Set([currentUserId, ...participantIds]),
+        ).filter(Boolean) as string[];
+        const newChatroomId = await createChatroomAsync({
+          participantIds: uniqueParticipantIds,
+        });
+        await refetchChatrooms();
+        setActiveChatroomId(newChatroomId);
+        setShowListOnMobile(false);
+        setIsMapDialogOpen(false);
+        setMapDialogChatroom(null);
+        const targetPath = `/chat/${getChatroomSlug(newChatroomId)}`;
+        if (pathname !== targetPath) {
+          router.push(targetPath);
+        }
+        toast.success("Chatroom created.");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to create chatroom. Please try again.",
+        );
+        throw error;
+      }
+    },
+    [
+      createChatroomAsync,
+      currentUserId,
+      refetchChatrooms,
+      router,
+      pathname,
+    ],
+  );
+
   const selectedChatroom = useMemo<Chatroom | null>(() => {
     if (!activeChatroomId) return null;
     return chatrooms.find((chatroom) => chatroom.id === activeChatroomId) ?? null;
   }, [chatrooms, activeChatroomId]);
-
-  const {
-    mutateAsync: sendMessageAsync,
-    isPending: isSending,
-  } = useMutation({
-    mutationFn: api.chat.sendMessage,
-    onSuccess: (message) => {
-      queryClient.setQueryData<Chatroom[]>(CHATROOMS_QUERY_KEY, (previous) => {
-        if (!previous) return previous;
-        const nextChatrooms = previous.map((chatroom) => {
-          if (chatroom.id !== message.chatroomId) return chatroom;
-          return {
-            ...chatroom,
-            messages: [...chatroom.messages, message],
-            updatedAt: message.sentAt,
-            unreadCount: 0,
-          };
-        });
-
-        return [...nextChatrooms].sort(
-          (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
-        );
-      });
-    },
-    onError: (error: Error) => {
-      toast.error(error.message ?? "Something went wrong while sending message.");
-    },
-  });
 
   const handleChatroomSelect = (chatroomId: string) => {
     const chatroom = chatrooms.find((item) => item.id === chatroomId);
@@ -214,19 +355,94 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     }
   };
 
-  const handleSendMessage = async (body: string) => {
-    if (!activeChatroomId) return;
-    if (!chatrooms.some((chatroom) => chatroom.id === activeChatroomId)) {
-      toast.error(ACCESS_DENIED_MESSAGE);
-      return;
-    }
+  const handleSendMessage = useCallback(
+    async (body: string) => {
+      if (!activeChatroomId || !currentUserId) return false;
+      if (!chatrooms.some((chatroom) => chatroom.id === activeChatroomId)) {
+        toast.error(ACCESS_DENIED_MESSAGE);
+        return false;
+      }
 
-    await sendMessageAsync({
-      chatroomId: activeChatroomId,
-      senderId: currentUserId,
-      body,
-    });
-  };
+      const payload = body.trim();
+      if (!payload) return false;
+
+      if (readyState !== ReadyState.OPEN) {
+        toast.error("Reconnecting to chat... please try again in a moment.");
+        return false;
+      }
+
+      setIsSending(true);
+      let success = false;
+      try {
+        sendMessage(payload);
+        success = true;
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Unable to send message through chat right now.",
+        );
+      } finally {
+        setIsSending(false);
+      }
+      return success;
+    },
+    [
+      activeChatroomId,
+      chatrooms,
+      currentUserId,
+      readyState,
+      sendMessage,
+    ],
+  );
+
+  const handleLeaveChatroom = useCallback(
+    async (chatroomId: string) => {
+      if (!chatroomId || !currentUserId) return;
+      try {
+        await leaveChatroomAsync(chatroomId);
+
+        queryClient.setQueryData<Chatroom[] | undefined>(
+          CHATROOMS_QUERY_KEY,
+          (previous) => {
+            if (!previous) return previous;
+            return previous.filter((chatroom) => chatroom.id !== chatroomId);
+          },
+        );
+
+        void refetchChatrooms();
+
+        if (activeChatroomId === chatroomId) {
+          setActiveChatroomId(null);
+          setShowListOnMobile(true);
+          setIsMapDialogOpen(false);
+          setMapDialogChatroom(null);
+          setIsParticipantsDialogOpen(false);
+          setParticipantsDialogChatroom(null);
+          if (pathname !== "/chat") {
+            router.push("/chat");
+          }
+        }
+
+        toast.success("You left the conversation.");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to leave the conversation. Please try again.",
+        );
+      }
+    },
+    [
+      activeChatroomId,
+      currentUserId,
+      leaveChatroomAsync,
+      pathname,
+      queryClient,
+      refetchChatrooms,
+      router,
+    ],
+  );
 
   const handleBackToList = () => {
     setShowListOnMobile(true);
@@ -238,7 +454,10 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   };
 
   const handleOpenMapDialog = (chatroom: Chatroom) => {
-    if (!chatroom.participants.some((participant) => participant.id === currentUserId)) {
+    if (
+      !currentUserId ||
+      !chatroom.participants.some((participant) => participant.id === currentUserId)
+    ) {
       toast.error(ACCESS_DENIED_MESSAGE);
       return;
     }
@@ -260,8 +479,32 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     }
   };
 
+  const handleOpenParticipantsDialog = (chatroom: Chatroom) => {
+    if (
+      !currentUserId ||
+      !chatroom.participants.some((participant) => participant.id === currentUserId)
+    ) {
+      toast.error(ACCESS_DENIED_MESSAGE);
+      return;
+    }
+
+    setParticipantsDialogChatroom(chatroom);
+    setIsParticipantsDialogOpen(true);
+  };
+
+  const handleParticipantsDialogOpenChange = (open: boolean) => {
+    setIsParticipantsDialogOpen(open);
+    if (!open) {
+      setParticipantsDialogChatroom(null);
+    }
+  };
+
   const handleShareSpot = async (spot: SelectedSpot) => {
     if (!mapDialogChatroom) return;
+    if (!currentUserId) {
+      toast.error(ACCESS_DENIED_MESSAGE);
+      return;
+    }
     if (
       !mapDialogChatroom.participants.some(
         (participant) => participant.id === currentUserId,
@@ -272,6 +515,10 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     }
 
     const { id: chatroomId } = mapDialogChatroom;
+    if (activeChatroomId !== chatroomId) {
+      toast.error("Open this conversation to share a meetup spot.");
+      return;
+    }
     const [lng, lat] = spot.coordinates;
     const titlePrefix = spot.category === "accessible" ? "🚗" : "📍";
     const googleLink = `https://www.google.com/maps?q=${lat},${lng}`;
@@ -283,57 +530,159 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     ].filter(Boolean);
     const messageBody = messageLines.join("\n");
 
-    try {
-      await sendMessageAsync({
-        chatroomId,
-        senderId: currentUserId,
-        body: messageBody,
-      });
+    const sent = await handleSendMessage(messageBody);
+    if (sent) {
       setIsMapDialogOpen(false);
       setMapDialogChatroom(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to share meetup spot.");
     }
   };
 
-  return (
-    <main className="flex h-full flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <div
-          className={cn(
-            "min-h-0 w-full shrink-0 flex-col border-b border-border/60 bg-background lg:w-[360px] lg:border-b-0 lg:border-r",
-            showListOnMobile ? "flex" : "hidden",
-            "lg:flex",
-          )}
-        >
-          <ChatroomList
-            chatrooms={chatrooms}
-            activeChatroomId={activeChatroomId}
-            currentUserId={currentUserId}
-            onSelect={handleChatroomSelect}
-            isLoading={chatroomListQuery.isLoading}
-            isError={chatroomListQuery.isError}
-            onRetry={() => chatroomListQuery.refetch()}
-          />
-        </div>
+  if (meQuery.isLoading) {
+    return (
+      <main className="flex h-full items-center justify-center">
+        <p className="text-sm text-muted-foreground">Loading chat...</p>
+      </main>
+    );
+  }
 
-        <div
-          className={cn(
-            "min-h-0 flex-1 flex-col bg-background",
-            showListOnMobile ? "hidden" : "flex",
-            "lg:flex",
-          )}
-        >
-          <MessagePane
-            chatroom={selectedChatroom}
-            currentUserId={currentUserId}
-            sending={isSending}
-            onSendMessage={handleSendMessage}
-            onBack={handleBackToList}
-            onOpenMap={handleOpenMapDialog}
-          />
+  if (meQuery.isError) {
+    return (
+      <main className="flex h-full items-center justify-center">
+        <p className="text-sm text-destructive">
+          {meQuery.error instanceof Error
+            ? meQuery.error.message
+            : "Failed to load your account. Please try again."}
+        </p>
+      </main>
+    );
+  }
+
+  if (!currentUserId) {
+    return (
+      <main className="flex h-full items-center justify-center">
+        <p className="text-sm text-muted-foreground">
+          Sign in to view your conversations.
+        </p>
+      </main>
+    );
+  }
+
+  return (
+    <>
+      <CreateChatroomDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        currentUserId={currentUserId}
+        onCreate={handleCreateChatroom}
+      />
+
+      <main className="flex h-full flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <div
+            className={cn(
+              "min-h-0 w-full shrink-0 flex-col border-b border-border/60 bg-background lg:w-[360px] lg:border-b-0 lg:border-r",
+              showListOnMobile ? "flex" : "hidden",
+              "lg:flex",
+            )}
+          >
+            <ChatroomList
+              chatrooms={chatrooms}
+              activeChatroomId={activeChatroomId}
+              currentUserId={currentUserId}
+              onSelect={handleChatroomSelect}
+              isLoading={chatroomListQuery.isLoading}
+              isError={chatroomListQuery.isError}
+              onRetry={() => chatroomListQuery.refetch()}
+              onStartNewChat={() => setIsCreateDialogOpen(true)}
+              disableNewChat={isCreatingChatroom}
+            />
+          </div>
+
+          <div
+            className={cn(
+              "min-h-0 flex-1 flex-col bg-background",
+              showListOnMobile ? "hidden" : "flex",
+              "lg:flex",
+            )}
+          >
+            <MessagePane
+              chatroom={selectedChatroom}
+              currentUserId={currentUserId}
+              sending={isSending}
+              onSendMessage={handleSendMessage}
+              onBack={handleBackToList}
+              onOpenMap={handleOpenMapDialog}
+              onLeaveChatroom={handleLeaveChatroom}
+              leaving={isLeavingChatroom}
+              onOpenParticipants={handleOpenParticipantsDialog}
+            />
+          </div>
         </div>
-      </div>
+      </main>
+      <Dialog
+        open={isParticipantsDialogOpen}
+        onOpenChange={handleParticipantsDialogOpenChange}
+      >
+        <DialogContent className="w-full max-w-md">
+          <DialogHeader className="space-y-2">
+            <DialogTitle>Participants</DialogTitle>
+            <DialogDescription>
+              {participantsDialogChatroom
+                ? "Review the people in this conversation."
+                : "View the members of this conversation."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {participantsDialogChatroom?.participants.length ? (
+              participantsDialogChatroom.participants.map((participant) => {
+                const displayName = participant.displayName?.trim().length
+                  ? participant.displayName
+                  : participant.username ?? participant.id;
+                const initials =
+                  displayName
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map((part) => part[0] ?? "")
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase() || "?";
+                const subtitle = participant.username ?? participant.id;
+
+                return (
+                  <div
+                    key={participant.id}
+                    className="flex items-center gap-3 rounded-lg border px-3 py-2"
+                  >
+                    <Avatar className="size-10">
+                      {participant.avatarUrl ? (
+                        <AvatarImage src={participant.avatarUrl} alt={displayName} />
+                      ) : null}
+                      <AvatarFallback className="text-sm font-semibold">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {displayName}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {subtitle}
+                      </p>
+                    </div>
+                    <Button type="button" size="sm" variant="outline">
+                      Block
+                    </Button>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No participants found for this conversation.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={isMapDialogOpen} onOpenChange={handleMapDialogOpenChange}>
         <DialogContent className="flex h-[min(95svh,820px)] w-full max-w-[calc(100vw-3rem)] flex-col overflow-hidden p-0 sm:max-w-[min(1200px,95vw)]">
           <DialogHeader className="space-y-2 px-6 pb-4 pt-6">
@@ -352,7 +701,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
           </div>
         </DialogContent>
       </Dialog>
-    </main>
+    </>
   );
 };
 

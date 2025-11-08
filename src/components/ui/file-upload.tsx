@@ -10,6 +10,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -323,6 +324,23 @@ export const FileInput = forwardRef<
 >(({ className, children, ...props }, ref) => {
   const { dropzoneState, isFileTooBig, isLOF } = useFileUpload();
   const rootProps = isLOF ? {} : dropzoneState.getRootProps();
+  const { ref: dropzoneInputRef, props: dropzoneInputProps } = useMemo(() => {
+    const { ref: providedRef, ...inputProps } = dropzoneState.getInputProps({
+      disabled: isLOF,
+    });
+    return { ref: providedRef, props: inputProps };
+  }, [dropzoneState, isLOF]);
+
+  const assignInputRef = useCallback(
+    (node: HTMLInputElement | null) => {
+      if (typeof dropzoneInputRef === "function") {
+        dropzoneInputRef(node);
+      }
+    },
+    [dropzoneInputRef],
+  );
+  const { className: dropzoneInputClassName, ...inputProps } = dropzoneInputProps;
+
   return (
     <div
       ref={ref}
@@ -348,10 +366,12 @@ export const FileInput = forwardRef<
         {children}
       </div>
       <Input
-        ref={dropzoneState.inputRef}
-        disabled={isLOF}
-        {...dropzoneState.getInputProps()}
-        className={`${isLOF ? "cursor-not-allowed" : ""}`}
+        {...inputProps}
+        ref={assignInputRef}
+        className={cn(
+          dropzoneInputClassName ?? "",
+          isLOF ? "cursor-not-allowed" : "",
+        )}
       />
     </div>
   );

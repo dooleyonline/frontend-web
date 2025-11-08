@@ -35,6 +35,33 @@ const MarketplaceNew = () => {
   });
 
   const { isDirty } = useFormState({ control: form.control });
+  const watchedValues = useWatch({
+    control: form.control,
+  }) as z.input<typeof formSchema> | undefined;
+
+  const previewItem = useMemo<Item>(() => {
+    const images = Array.isArray(watchedValues?.images)
+      ? watchedValues.images.map((img) =>
+          img instanceof File ? URL.createObjectURL(img) : String(img),
+        )
+      : [];
+
+    return {
+      id: -1,
+      name: watchedValues?.name ?? "",
+      description: watchedValues?.description ?? "",
+      placeholder: null,
+      images,
+      price: Number(watchedValues?.price ?? 0) || 0,
+      condition: Number(watchedValues?.condition ?? 0) || 0,
+      isNegotiable: Boolean(watchedValues?.negotiable),
+      postedAt: new Date(),
+      soldAt: null,
+      views: 112,
+      category: watchedValues?.category ?? "",
+      subcategory: watchedValues?.subcategory ?? "",
+    };
+  }, [watchedValues]);
 
   useEffect(() => {
     // Handle browser refresh/close
