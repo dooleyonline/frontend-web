@@ -19,6 +19,8 @@ import {
 import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
+import { User } from "@/lib/types";
+import { userFullname, userInitial } from "@/lib/utils";
 import {
   BellIcon,
   LogOutIcon,
@@ -39,10 +41,6 @@ export function NavUser() {
     await revalidate();
   }, []);
 
-  const fullName = user ? `${user.firstName} ${user.lastName}` : "";
-  const initial = user
-    ? (user.firstName.charAt(0) + user.lastName.charAt(0)).toUpperCase()
-    : "";
   return (
     <SidebarMenu>
       {user ? (
@@ -53,9 +51,11 @@ export function NavUser() {
                 size="lg"
                 className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
               >
-                <UserAvatar fullName={fullName} src={""} initial={initial} />
+                <UserAvatar {...user} />
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{fullName}</span>
+                  <span className="truncate font-medium">
+                    {userFullname(user)}
+                  </span>
                   <span className="truncate text-xs text-muted-foreground">
                     {user.email}
                   </span>
@@ -71,9 +71,11 @@ export function NavUser() {
             >
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <UserAvatar fullName={fullName} src={""} initial={initial} />
+                  <UserAvatar {...user} />
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{fullName}</span>
+                    <span className="truncate font-medium">
+                      {userFullname(user)}
+                    </span>
                     <span className="truncate text-xs text-muted-foreground">
                       {user.email}
                     </span>
@@ -112,16 +114,13 @@ export function NavUser() {
   );
 }
 
-type UserAvatarProps = {
-  src: string;
-  fullName: string;
-  initial: string;
-};
-const UserAvatar = memo(({ src, fullName, initial }: UserAvatarProps) => {
+const UserAvatar = memo((user: User) => {
   return (
     <Avatar className="h-8 w-8 rounded-lg">
-      <AvatarImage src="/images/banner.webp" alt={fullName} />
-      <AvatarFallback className="rounded-lg">{initial}</AvatarFallback>
+      <AvatarImage src="/images/banner.webp" alt={userFullname(user)} />
+      <AvatarFallback className="rounded-lg">
+        {userInitial(user)}
+      </AvatarFallback>
     </Avatar>
   );
 });
