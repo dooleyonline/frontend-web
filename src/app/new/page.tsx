@@ -2,29 +2,34 @@
 
 import StepVisualizer from "@/components/form/step-visualizer";
 import { ItemModal } from "@/components/item";
-import { Item } from "@/lib/types";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useState } from "react";
-import { useForm, useFormState, useWatch } from "react-hook-form";
+import { Form } from "@/components/ui/form";
+import api from "@/lib/api";
+import { serverQuery } from "@/lib/api/shared";
+import { ItemCreateSchema } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import { MouseEventHandler, useEffect, useState } from "react";
+import { useForm, useFormState } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod/v4";
 
-import { defaultFormValues, formSchema } from "./(form)/schema";
-import Step1 from "./(form)/step-1";
-import Step2 from "./(form)/step-2";
+import { Step1 } from "./(form)/step-1";
+import { Step2 } from "./(form)/step-2";
 import Step3 from "./(form)/step-3";
 
 const MarketplaceNew = () => {
+  const router = useRouter();
   const [step, setStep] = useState(1);
+  const [images, setImages] = useState<File[]>([]);
 
-  const form = useForm<
-    z.input<typeof formSchema>,
-    unknown,
-    z.output<typeof formSchema>
-  >({
-    resolver: zodResolver(formSchema),
+  const form = useForm<ItemCreateSchema>({
     defaultValues: {
-      ...defaultFormValues,
+      name: "",
+      description: "",
+      price: 0,
+      images: [],
+      condition: 0,
+      category: "",
+      subcategory: "",
+      isNegotiable: false,
     },
     mode: "onChange",
   });
@@ -70,51 +75,61 @@ const MarketplaceNew = () => {
     window.addEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
-  function onSubmit(values: unknown) {
-    try {
-      setStep((prev) => {
-        if (prev === 3) {
-          toast.success("Your item is successfully posted!", {
-            description: new Date().toLocaleString(),
-            action: {
-              label: "View Item",
-              onClick: () => console.log("Viewing Item"),
-            },
-          });
-          console.log("Submitting form values:", values);
+  const handleSubmit = async (values: ItemCreateSchema) => {
+    const imgUploads = await Promise.all(
+      images.map((img) => serverQuery(api.item.uploadImage(img)))
+    );
 
-          form.reset();
-          return 1;
-        }
-
-        return prev + 1;
+    if (imgUploads.some(({ data, error }) => !data || !!error)) {
+      toast.error("Something went wrong!", {
+        description: "Please try again later",
       });
-    } catch (error) {
-      console.error("Form submission error", error);
-      toast.error("Failed to submit the form. Please try again.");
+      return;
     }
-  }
 
-  function onBack() {
-    if (step > 1) {
-      setStep((prev) => prev - 1);
-    } else {
-      toast.error("You are already on the first step.");
+    values.images = imgUploads.map(({ data }) => data!);
+
+    const { data, error } = await serverQuery(api.item.create(values));
+    if (error) {
+      toast.error("Something went wrong!", {
+        description: "Please try again later",
+      });
+      return;
     }
-  }
+
+    toast.success("Your item is successfully posted!", {
+      description: new Date().toLocaleString(),
+    });
+
+    router.push(data ? `/item/${data.id}` : "/");
+
+    form.reset();
+  };
+
+  const handleNext: MouseEventHandler<HTMLButtonElement> = (e) => {
+    e.preventDefault();
+    setStep((prev) => Math.min(prev + 1, steps.length));
+  };
+
+  const handleBack: MouseEventHandler<HTMLButtonElement> = (e) => {
+    e.preventDefault();
+    setStep((prev) => Math.max(prev - 1, 1));
+  };
 
   const steps = [
     {
       title: "Basic Information",
-      form: <Step1 form={form} onSubmit={onSubmit} />,
+      form: (
+        <Step1 handleNext={handleNext} images={images} setImages={setImages} />
+      ),
     },
     {
       title: "Condition & Price",
-      form: <Step2 form={form} onSubmit={onSubmit} onBack={onBack} />,
+      form: <Step2 handleNext={handleNext} handleBack={handleBack} />,
     },
     {
       title: "Confirm",
-      form: <Step3 form={form} onSubmit={onSubmit} onBack={onBack} />,
+      form: <Step3 handleBack={handleBack} />,
     },
   ];
 
@@ -127,17 +142,26 @@ const MarketplaceNew = () => {
           currentStep={step}
         />
         <h2>{steps[step - 1].title}</h2>
-        {steps[step - 1].form}
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)}>
+            {steps[step - 1].form}
+          </form>
+        </Form>
       </div>
 
       {/* PREVIEW */}
       <div className="flex-1/3 hidden lg:block min-w-sm max-w-2xl p-6 border rounded-xl">
         <ItemModal
-          item={
-            {
-              ...previewItem,
-            } satisfies Item
-          }
+          item={{
+            id: -1,
+            ...form.watch(),
+            postedAt: new Date(),
+            soldAt: null,
+            placeholder: null,
+            views: 112,
+            images:
+              images?.map((img) => URL.createObjectURL(img as File)) ?? [],
+          }}
           isPreview
         />
       </div>

@@ -46,3 +46,41 @@ export const itemSearchParams = z.object({
 });
 
 export type ItemSearchParams = z.infer<typeof itemSearchParams>;
+
+export const itemCreateSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  images: z.array(z.string()),
+  price: z.number(),
+  condition: z.number(),
+  isNegotiable: z.boolean(),
+  category: z.string(),
+  subcategory: z.string(),
+});
+
+export const itemCreateJsonSchema = itemCreateSchema.transform((data) => ({
+  name: data.name,
+  description: data.description,
+  images: data.images,
+  price: data.price,
+  condition: data.condition,
+  is_negotiable: data.isNegotiable,
+  category: data.category,
+  subcategory: data.subcategory,
+}));
+
+export type ItemCreateSchema = z.infer<typeof itemCreateSchema>;
+
+export const presignJsonSchema = z.object({
+  url: z.url(),
+  headers: z.object(),
+  image_id: z.uuid(),
+});
+
+export const presignSchema = presignJsonSchema.transform((data) => ({
+  URL: data.url,
+  headers: data.headers,
+  imageID: data.image_id,
+}));
+
+export type PresignSchema = z.infer<typeof presignSchema>;
