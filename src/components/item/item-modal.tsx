@@ -1,6 +1,16 @@
 "use client";
 
 import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { HeartIcon, Loader2Icon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { memo, useMemo } from "react";
+import { toast } from "sonner";
+
+import {
   ItemConditionBadge,
   ItemNegotiableBadge,
 } from "@/components/item/item-badge";
@@ -15,13 +25,30 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useUser } from "@/hooks/use-user";
+import api from "@/lib/api";
 import { Item } from "@/lib/types";
-import { cn, formatPrice } from "@/lib/utils";
+import { cn, createImageURL, formatPrice } from "@/lib/utils";
 import getRelativeTime from "@/lib/utils/get-relative-time";
-import { HeartIcon } from "lucide-react";
-import { memo } from "react";
+import { savePendingChatMessage } from "@/lib/chat/pending-message";
 
 import { Skeleton } from "../ui/skeleton";
+
+const CHATROOM_ID_PREFIX = "room-";
+const getChatroomSlug = (chatroomId: string) => {
+  if (
+    chatroomId.startsWith(CHATROOM_ID_PREFIX) &&
+    chatroomId.length > CHATROOM_ID_PREFIX.length
+  ) {
+    return chatroomId.slice(CHATROOM_ID_PREFIX.length);
+  }
+  return chatroomId;
+};
+
+type ContactSellerInput = {
+  sellerId: string;
+  buyerId: string;
+};
 
 type ItemModalProps = {
   item?: Item | null;
@@ -33,10 +60,123 @@ type ItemModalProps = {
 
 export const ItemModal = memo((props: ItemModalProps) => {
   const { item, isLoading = false, error, isPreview, className } = props;
+  const router = useRouter();
+  const { user: currentUser } = useUser();
+  const queryClient = useQueryClient();
+  const chatroomsQueryOptions = useMemo(() => api.chat.getChatrooms(), []);
+  const sellerQuery = useQuery({
+    ...api.user.get(item?.sellerId ?? ""),
+    enabled: Boolean(item?.sellerId),
+  });
+  const {
+    mutateAsync: ensureChatroomAsync,
+    isPending: isContactingSeller,
+  } = useMutation({
+    mutationFn: async ({ sellerId, buyerId }: ContactSellerInput) => {
+      const participantIds = Array.from(new Set([sellerId, buyerId]));
+      let chatroomId: string | null = null;
+
+      try {
+        const chatrooms = await queryClient.ensureQueryData(
+          chatroomsQueryOptions,
+        );
+        chatroomId =
+          chatrooms.find((room) => {
+            if (room.isGroup) return false;
+            const ids = room.participants.map((participant) => participant.id);
+            return participantIds.every((id) => ids.includes(id));
+          })?.id ?? null;
+      } catch {
+        chatroomId = null;
+      }
+
+      if (!chatroomId) {
+        chatroomId = await api.chat.createChatroom({
+          participantIds,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: chatroomsQueryOptions.queryKey,
+        });
+      }
+
+      return chatroomId;
+    },
+  });
 
   if (error) console.error("Error loading item:", error);
 
   const relativeTime = item?.postedAt ? getRelativeTime(item.postedAt) : "";
+  const isOwnListing =
+    Boolean(item?.sellerId) && currentUser?.id === item?.sellerId;
+  const seller = sellerQuery.data ?? null;
+  const sellerDisplayName = (() => {
+    if (seller) {
+      const first = seller.firstName?.trim();
+      const last = seller.lastName?.trim();
+      const parts = [first, last].filter(Boolean);
+      if (parts.length > 0) return parts.join(" ");
+      if (seller.email?.trim()) return seller.email.trim();
+    }
+    return "Seller";
+  })();
+  const sellerInitials =
+    sellerDisplayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("")
+      .slice(0, 2) || "??";
+  const sellerAvatarUrl =
+    seller?.avatar && seller.avatar.trim().length > 0
+      ? createImageURL(seller.avatar)
+      : undefined;
+
+  const handleContactSeller = async () => {
+    if (!item?.sellerId) {
+      toast.error("Seller information is unavailable for this item.");
+      return;
+    }
+
+    if (!currentUser) {
+      toast.error("Sign in to contact the seller.");
+      router.push("/auth/sign-in");
+      return;
+    }
+
+    if (currentUser.id === item.sellerId) {
+      toast.error("This is your listing.");
+      return;
+    }
+
+    try {
+      const itemUrl =
+        typeof window !== "undefined" && window.location.href
+          ? window.location.href
+          : `/item/${item.id}`;
+      const chatroomId = await ensureChatroomAsync({
+        buyerId: currentUser.id,
+        sellerId: item.sellerId,
+      });
+      if (!chatroomId) {
+        toast.error("Unable to contact the seller right now.");
+        return;
+      }
+      savePendingChatMessage({
+        chatroomId,
+        body: itemUrl,
+        createdAt: Date.now(),
+      });
+      const slug = getChatroomSlug(chatroomId);
+      router.push(`/chat/${slug}`);
+      toast.success("Shared this item with the seller.");
+    } catch (chatError) {
+      toast.error(
+        chatError instanceof Error
+          ? chatError.message
+          : "Failed to contact the seller. Please try again.",
+      );
+    }
+  };
 
   return (
     <Card className={cn("h-full shadow-none border-none p-0", className)}>
@@ -100,15 +240,21 @@ export const ItemModal = memo((props: ItemModalProps) => {
 
           <div className="flex gap-2 items-center">
             <Avatar className="size-8">
-              <AvatarImage src="https://github.com/shadcn.png" />
-              <AvatarFallback>CN</AvatarFallback>
+              {sellerAvatarUrl ? (
+                <AvatarImage src={sellerAvatarUrl} alt={sellerDisplayName} />
+              ) : null}
+              <AvatarFallback>{sellerInitials}</AvatarFallback>
             </Avatar>
 
             {!item || isLoading ? (
               <Skeleton className="h-4 w-32" />
             ) : (
               <div>
-                <span className="mr-2 inline-block">Ethan Lee</span>
+                {sellerQuery.isLoading ? (
+                  <Skeleton className="h-4 w-24" />
+                ) : (
+                  <span className="mr-2 inline-block">{sellerDisplayName}</span>
+                )}
                 <small className="text-muted-foreground">
                   {relativeTime} · {item.views} views
                 </small>
@@ -119,8 +265,23 @@ export const ItemModal = memo((props: ItemModalProps) => {
 
         {!isPreview && (
           <CardFooter className="absolute bottom-0 left-0 gap-2 p-0 w-full bg-background">
-            <Button variant="default" size="lg" className="flex-1">
-              Contact Seller
+            <Button
+              type="button"
+              variant="default"
+              size="lg"
+              className="flex-1"
+              onClick={handleContactSeller}
+              disabled={
+                isLoading ||
+                !item?.sellerId ||
+                isOwnListing ||
+                isContactingSeller
+              }
+            >
+              {isContactingSeller ? (
+                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {isOwnListing ? "You are the seller" : "Contact Seller"}
             </Button>
             <Button size="lg" variant="outline" className="flex-0">
               <HeartIcon />

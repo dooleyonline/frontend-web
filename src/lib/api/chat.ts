@@ -418,10 +418,8 @@ export const addParticipant = async ({
 export const removeParticipant = async ({
   chatroomId,
   userId,
-}: ChatroomParticipantInput): Promise<Chatroom> => {
+}: ChatroomParticipantInput): Promise<void> => {
   await apiClient.delete(`chat/${chatroomId}/participants/${userId}`);
-
-  return fetchChatroom(chatroomId);
 };
 
 export const sendMessage = async (

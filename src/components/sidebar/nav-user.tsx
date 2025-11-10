@@ -39,7 +39,7 @@ export function NavUser() {
   const handleSignOut = useCallback(async () => {
     await serverQuery(api.auth.signOut());
     await revalidate();
-  }, []);
+  }, [revalidate]);
 
   return (
     <SidebarMenu>

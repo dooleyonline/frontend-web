@@ -23,6 +23,10 @@ import api from "@/lib/api";
 import { API_BASE_URL } from "@/lib/env";
 import { ChatMessage, Chatroom, chatMessageSchema } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  clearPendingChatMessage,
+  loadPendingChatMessage,
+} from "@/lib/chat/pending-message";
 
 const CHATROOMS_QUERY_KEY = ["chat", "chatrooms"] as const;
 const ACCESS_DENIED_MESSAGE = "You do not have access to this conversation.";
@@ -94,6 +98,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     [allChatrooms, currentUserId],
   );
   const chatroomListFetched = chatroomListQuery.isFetched && Boolean(currentUserId);
+  const chatroomListFetching = chatroomListQuery.isFetching;
   const refetchChatrooms = chatroomListQuery.refetch;
 
   const {
@@ -166,6 +171,9 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     });
 
     if (!matchingChatroom) {
+      if (chatroomListFetching) {
+        return;
+      }
       if (!invalidAccessToastShownRef.current) {
         toast.error(CHATROOM_NOT_FOUND_MESSAGE);
         invalidAccessToastShownRef.current = true;
@@ -223,6 +231,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     activeChatroomId,
     allChatrooms,
     chatroomListFetched,
+    chatroomListFetching,
     currentUserId,
     initialChatroomSlug,
     pathname,
@@ -396,6 +405,34 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     ],
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!activeChatroomId) return;
+    if (readyState !== ReadyState.OPEN) return;
+    const pending = loadPendingChatMessage();
+    if (!pending) return;
+    if (pending.chatroomId !== activeChatroomId) return;
+
+    const maxAgeMs = 5 * 60 * 1000;
+    const isStale = Date.now() - pending.createdAt > maxAgeMs;
+    if (isStale) {
+      clearPendingChatMessage();
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const sent = await handleSendMessage(pending.body);
+      if (!cancelled && sent) {
+        clearPendingChatMessage();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChatroomId, readyState, handleSendMessage]);
+
   const handleLeaveChatroom = useCallback(
     async (chatroomId: string) => {
       if (!chatroomId || !currentUserId) return;
@@ -412,7 +449,8 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
 
         void refetchChatrooms();
 
-        if (activeChatroomId === chatroomId) {
+        const leftActiveChatroom = activeChatroomId === chatroomId;
+        if (leftActiveChatroom) {
           setActiveChatroomId(null);
           setShowListOnMobile(true);
           setIsMapDialogOpen(false);
@@ -420,7 +458,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
           setIsParticipantsDialogOpen(false);
           setParticipantsDialogChatroom(null);
           if (pathname !== "/chat") {
-            router.push("/chat");
+            router.replace("/chat");
           }
         }
 
