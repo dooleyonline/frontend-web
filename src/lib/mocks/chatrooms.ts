@@ -235,7 +235,7 @@ export const mockChatApi = {
     return cloneChatroom(chatroom);
   },
 
-  removeParticipant: async (chatroomId: string, userId: string): Promise<Chatroom> => {
+  removeParticipant: async (chatroomId: string, userId: string): Promise<void> => {
     const chatroom = ensureChatroom(chatroomId);
     chatroom.participants = chatroom.participants.filter((participant) => participant.id !== userId);
     chatroom.updatedAt = new Date();
@@ -243,7 +243,6 @@ export const mockChatApi = {
       .filter((room) => room.id !== chatroom.id)
       .concat(chatroom)
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    return cloneChatroom(chatroom);
   },
 
   updateMessage: async (chatroomId: string, messageId: string, body: string): Promise<ChatMessage> => {

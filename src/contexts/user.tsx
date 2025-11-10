@@ -1,45 +1,53 @@
 "use client";
 
 import api from "@/lib/api";
-import { serverQuery } from "@/lib/api/shared";
 import { User } from "@/lib/types";
-import { useQuery } from "@tanstack/react-query";
-import { PropsWithChildren, createContext, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  PropsWithChildren,
+  createContext,
+  useCallback,
+  useMemo,
+} from "react";
+
+const authQueryOptions = api.auth.me();
 
 type UserContextType = {
   user: User | null;
-  revalidate: Function;
+  revalidate: () => Promise<User | null>;
 };
 
 export const UserContext = createContext<UserContextType>({
   user: null,
-  revalidate: () => {},
+  revalidate: async () => null,
 });
 
 export const UserProvider = ({ children }: PropsWithChildren) => {
-  const [user, setUser] = useState<User | null>(null);
-  const { data, error } = useQuery(api.auth.me());
+  const queryClient = useQueryClient();
+  const { data, error } = useQuery(authQueryOptions);
 
-  const revalidate = async () => {
-    const { data, error } = await serverQuery(api.auth.me());
-    if (error) {
-      setUser(null);
-      return;
+  const user = error ? null : data ?? null;
+
+  const revalidate = useCallback(async () => {
+    try {
+      const nextUser = await queryClient.fetchQuery(authQueryOptions);
+      return nextUser;
+    } catch {
+      queryClient.setQueryData(authQueryOptions.queryKey, null);
+      return null;
     }
-    setUser(data);
-  };
+  }, [queryClient]);
 
-  useEffect(() => {
-    if (error) {
-      setUser(null);
-      return;
-    }
-
-    setUser(data ?? null);
-  }, [data, error]);
+  const value = useMemo(
+    () => ({
+      user,
+      revalidate,
+    }),
+    [user, revalidate],
+  );
 
   return (
-    <UserContext.Provider value={{ user, revalidate }}>
+    <UserContext.Provider value={value}>
       {children}
     </UserContext.Provider>
   );

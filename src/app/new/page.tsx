@@ -5,15 +5,17 @@ import { ItemModal } from "@/components/item";
 import { Form } from "@/components/ui/form";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
-import { ItemCreateSchema } from "@/lib/types";
+import { Item, ItemCreateSchema } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { MouseEventHandler, useEffect, useState } from "react";
-import { useForm, useFormState } from "react-hook-form";
+import { MouseEventHandler, useEffect, useMemo, useState } from "react";
+import { useForm, useFormState, useWatch } from "react-hook-form";
 import { toast } from "sonner";
+import type { z } from "zod";
 
 import { Step1 } from "./(form)/step-1";
 import { Step2 } from "./(form)/step-2";
 import Step3 from "./(form)/step-3";
+import { formSchema } from "./(form)/schema";
 
 const MarketplaceNew = () => {
   const router = useRouter();
@@ -39,29 +41,41 @@ const MarketplaceNew = () => {
     control: form.control,
   }) as z.input<typeof formSchema> | undefined;
 
+  const previewImages = useMemo(() => {
+    return images.map((img) => URL.createObjectURL(img));
+  }, [images]);
+
+  useEffect(() => {
+    return () => {
+      previewImages.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [previewImages]);
+
   const previewItem = useMemo<Item>(() => {
-    const images = Array.isArray(watchedValues?.images)
-      ? watchedValues.images.map((img) =>
-          img instanceof File ? URL.createObjectURL(img) : String(img),
-        )
-      : [];
+    const negotiable =
+      (watchedValues as { negotiable?: boolean; isNegotiable?: boolean })
+        ?.negotiable ??
+      (watchedValues as { negotiable?: boolean; isNegotiable?: boolean })
+        ?.isNegotiable ??
+      false;
 
     return {
       id: -1,
       name: watchedValues?.name ?? "",
       description: watchedValues?.description ?? "",
       placeholder: null,
-      images,
+      images: previewImages,
       price: Number(watchedValues?.price ?? 0) || 0,
       condition: Number(watchedValues?.condition ?? 0) || 0,
-      isNegotiable: Boolean(watchedValues?.negotiable),
+      isNegotiable: Boolean(negotiable),
       postedAt: new Date(),
       soldAt: null,
       views: 112,
       category: watchedValues?.category ?? "",
       subcategory: watchedValues?.subcategory ?? "",
+      sellerId: null,
     };
-  }, [watchedValues]);
+  }, [watchedValues, previewImages]);
 
   useEffect(() => {
     // Handle browser refresh/close
@@ -151,19 +165,7 @@ const MarketplaceNew = () => {
 
       {/* PREVIEW */}
       <div className="flex-1/3 hidden lg:block min-w-sm max-w-2xl p-6 border rounded-xl">
-        <ItemModal
-          item={{
-            id: -1,
-            ...form.watch(),
-            postedAt: new Date(),
-            soldAt: null,
-            placeholder: null,
-            views: 112,
-            images:
-              images?.map((img) => URL.createObjectURL(img as File)) ?? [],
-          }}
-          isPreview
-        />
+        <ItemModal item={previewItem} isPreview />
       </div>
     </main>
   );
