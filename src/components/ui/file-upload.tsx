@@ -10,7 +10,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -288,7 +287,7 @@ export const FileUploaderItem = forwardRef<
   { index: number } & React.HTMLAttributes<HTMLDivElement>
 >(({ className, index, children, ...props }, ref) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { removeFileFromSet, activeIndex, direction } = useFileUpload();
+  const { activeIndex } = useFileUpload();
   const isSelected = index === activeIndex;
   return (
     <div

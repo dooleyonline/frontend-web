@@ -65,8 +65,8 @@ export const ItemModal = memo((props: ItemModalProps) => {
   const queryClient = useQueryClient();
   const chatroomsQueryOptions = useMemo(() => api.chat.getChatrooms(), []);
   const sellerQuery = useQuery({
-    ...api.user.get(item?.sellerId ?? ""),
-    enabled: Boolean(item?.sellerId),
+    ...api.user.get(item?.seller ?? ""),
+    enabled: Boolean(item?.seller),
   });
   const {
     mutateAsync: ensureChatroomAsync,
@@ -107,7 +107,7 @@ export const ItemModal = memo((props: ItemModalProps) => {
 
   const relativeTime = item?.postedAt ? getRelativeTime(item.postedAt) : "";
   const isOwnListing =
-    Boolean(item?.sellerId) && currentUser?.id === item?.sellerId;
+    Boolean(item?.seller) && currentUser?.id === item?.seller;
   const seller = sellerQuery.data ?? null;
   const sellerDisplayName = (() => {
     if (seller) {
@@ -132,7 +132,7 @@ export const ItemModal = memo((props: ItemModalProps) => {
       : undefined;
 
   const handleContactSeller = async () => {
-    if (!item?.sellerId) {
+    if (!item?.seller) {
       toast.error("Seller information is unavailable for this item.");
       return;
     }
@@ -143,7 +143,7 @@ export const ItemModal = memo((props: ItemModalProps) => {
       return;
     }
 
-    if (currentUser.id === item.sellerId) {
+    if (currentUser.id === item.seller) {
       toast.error("This is your listing.");
       return;
     }
@@ -155,7 +155,7 @@ export const ItemModal = memo((props: ItemModalProps) => {
           : `/item/${item.id}`;
       const chatroomId = await ensureChatroomAsync({
         buyerId: currentUser.id,
-        sellerId: item.sellerId,
+        sellerId: item.seller,
       });
       if (!chatroomId) {
         toast.error("Unable to contact the seller right now.");
@@ -273,7 +273,7 @@ export const ItemModal = memo((props: ItemModalProps) => {
               onClick={handleContactSeller}
               disabled={
                 isLoading ||
-                !item?.sellerId ||
+                !item?.seller ||
                 isOwnListing ||
                 isContactingSeller
               }

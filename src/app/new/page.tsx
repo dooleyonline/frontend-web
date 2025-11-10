@@ -3,24 +3,24 @@
 import StepVisualizer from "@/components/form/step-visualizer";
 import { ItemModal } from "@/components/item";
 import { Form } from "@/components/ui/form";
+import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
-import { Item, ItemCreateSchema } from "@/lib/types";
+import { ItemCreateSchema } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { MouseEventHandler, useEffect, useMemo, useState } from "react";
-import { useForm, useFormState, useWatch } from "react-hook-form";
+import { MouseEventHandler, useEffect, useState } from "react";
+import { useForm, useFormState } from "react-hook-form";
 import { toast } from "sonner";
-import type { z } from "zod";
 
 import { Step1 } from "./(form)/step-1";
 import { Step2 } from "./(form)/step-2";
 import Step3 from "./(form)/step-3";
-import { formSchema } from "./(form)/schema";
 
 const MarketplaceNew = () => {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [images, setImages] = useState<File[]>([]);
+  const { user } = useUser();
 
   const form = useForm<ItemCreateSchema>({
     defaultValues: {
@@ -132,7 +132,20 @@ const MarketplaceNew = () => {
 
       {/* PREVIEW */}
       <div className="flex-1/3 hidden lg:block min-w-sm max-w-2xl p-6 border rounded-xl">
-        <ItemModal item={previewItem} isPreview />
+        <ItemModal
+          item={{
+            id: -1,
+            ...form.watch(),
+            postedAt: new Date(),
+            soldAt: null,
+            placeholder: null,
+            views: 112,
+            images:
+              images?.map((img) => URL.createObjectURL(img as File)) ?? [],
+            seller: user!.id,
+          }}
+          isPreview
+        />
       </div>
     </main>
   );

@@ -16,7 +16,7 @@ export const itemJsonSchema = z.object({
   views: z.number(),
   category: z.string(),
   subcategory: z.string(),
-  seller: z.string().uuid().optional().nullable(),
+  seller: z.uuid().optional().nullable(),
 });
 
 export const itemSchema = itemJsonSchema.transform((data) => ({
@@ -33,7 +33,7 @@ export const itemSchema = itemJsonSchema.transform((data) => ({
   views: data.views,
   category: data.category,
   subcategory: data.subcategory,
-  sellerId: data.seller ?? null,
+  seller: data.seller ?? null,
 }));
 
 export type Item = z.infer<typeof itemSchema>;
