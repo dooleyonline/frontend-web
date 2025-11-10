@@ -1,11 +1,19 @@
+"use client";
+
 import { ItemModal } from "@/components/item";
 import api from "@/lib/api";
-import { serverQuery } from "@/lib/api/shared";
+import { useQuery } from "@tanstack/react-query";
+import { notFound } from "next/navigation";
+import { use } from "react";
 
-const MarketplaceItem = async ({ params }: PageProps<"/item/[id]">) => {
-  const { id } = await params;
-  const { data, error } = await serverQuery(api.item.get(id));
-  await serverQuery(api.item.view(id));
+const MarketplaceItem = ({ params }: PageProps<"/item/[id]">) => {
+  const { id } = use(params);
+  const { data, error } = useQuery(api.item.get(id));
+  if (error) {
+    notFound();
+  }
+
+  useQuery(api.item.view(id));
 
   return (
     <main className="size-full">
@@ -15,14 +23,3 @@ const MarketplaceItem = async ({ params }: PageProps<"/item/[id]">) => {
 };
 
 export default MarketplaceItem;
-
-export const dynamic = "force-static";
-export const revalidate = 600;
-
-export const generateStaticParams = async () => {
-  const ids = serverQuery(api.item.getMany()).then(({ data }) =>
-    data ? data.map((item) => ({ id: item.id.toString() })) : []
-  );
-
-  return ids;
-};

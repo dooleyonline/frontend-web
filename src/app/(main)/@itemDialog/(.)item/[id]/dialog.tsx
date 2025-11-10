@@ -11,7 +11,7 @@ import { Item } from "@/lib/types";
 import { useRouter } from "next/navigation";
 
 type ItemDialogProps = {
-  item: Item | null;
+  item: Item | null | undefined;
   error: Error | null;
 };
 

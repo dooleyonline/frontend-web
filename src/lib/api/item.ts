@@ -47,6 +47,7 @@ export const view = (id: number | string): ApiQueryOptions<null> => {
       await apiClient.post(url);
       return null;
     },
+    gcTime: 0,
   };
 };
 
