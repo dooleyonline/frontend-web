@@ -7,6 +7,7 @@ import {
   presignSchema,
 } from "@/lib/types";
 import axios from "axios";
+import { randomBytes } from "crypto";
 import { z } from "zod";
 
 import { ApiQueryOptions, apiClient } from "./shared";
@@ -72,7 +73,7 @@ export const uploadImage = (file: File): ApiQueryOptions<string> => {
   const params = new URLSearchParams({ type: file.type });
 
   return {
-    queryKey: [url, params],
+    queryKey: [url, params, randomBytes.toString()],
     queryFn: async () => {
       const presignRes = await apiClient.post(url, undefined, {
         params,
