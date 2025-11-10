@@ -1,3 +1,5 @@
+"use server"
+
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
 
@@ -14,13 +16,13 @@ const ItemDialogPage = async ({ params }: PageProps<"/item/[id]">) => {
 
 export default ItemDialogPage;
 
-export const dynamic = "force-static";
-export const revalidate = 600;
+// export const dynamic = "force-static";
+// export const revalidate = 600;
 
-export const generateStaticParams = async () => {
-  const ids = serverQuery(api.item.getMany()).then(({ data }) =>
-    data ? data.map((item) => ({ id: item.id.toString() })) : []
-  );
+// export const generateStaticParams = async () => {
+//   const ids = serverQuery(api.item.getMany()).then(({ data }) =>
+//     data ? data.map((item) => ({ id: item.id.toString() })) : []
+//   );
 
-  return ids;
-};
+//   return ids;
+// };

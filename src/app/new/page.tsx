@@ -35,33 +35,6 @@ const MarketplaceNew = () => {
   });
 
   const { isDirty } = useFormState({ control: form.control });
-  const watchedValues = useWatch({
-    control: form.control,
-  }) as z.input<typeof formSchema> | undefined;
-
-  const previewItem = useMemo<Item>(() => {
-    const images = Array.isArray(watchedValues?.images)
-      ? watchedValues.images.map((img) =>
-          img instanceof File ? URL.createObjectURL(img) : String(img),
-        )
-      : [];
-
-    return {
-      id: -1,
-      name: watchedValues?.name ?? "",
-      description: watchedValues?.description ?? "",
-      placeholder: null,
-      images,
-      price: Number(watchedValues?.price ?? 0) || 0,
-      condition: Number(watchedValues?.condition ?? 0) || 0,
-      isNegotiable: Boolean(watchedValues?.negotiable),
-      postedAt: new Date(),
-      soldAt: null,
-      views: 112,
-      category: watchedValues?.category ?? "",
-      subcategory: watchedValues?.subcategory ?? "",
-    };
-  }, [watchedValues]);
 
   useEffect(() => {
     // Handle browser refresh/close
@@ -76,18 +49,23 @@ const MarketplaceNew = () => {
   }, [isDirty]);
 
   const handleSubmit = async (values: ItemCreateSchema) => {
-    const imgUploads = await Promise.all(
-      images.map((img) => serverQuery(api.item.uploadImage(img)))
-    );
+    let allUploaded = true;
 
-    if (imgUploads.some(({ data, error }) => !data || !!error)) {
+    images.forEach(async (img) => {
+      const { data, error } = await serverQuery(api.item.uploadImage(img));
+      if (error || !data) {
+        allUploaded = false;
+        return;
+      }
+      values.images.push(data);
+    });
+
+    if (!allUploaded) {
       toast.error("Something went wrong!", {
         description: "Please try again later",
       });
       return;
     }
-
-    values.images = imgUploads.map(({ data }) => data!);
 
     const { data, error } = await serverQuery(api.item.create(values));
     if (error) {
