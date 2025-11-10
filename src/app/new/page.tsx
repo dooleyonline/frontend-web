@@ -7,7 +7,7 @@ import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
 import { ItemCreateSchema } from "@/lib/types";
-import { useRouter } from "next/navigation";
+import { redirect, useRouter } from "next/navigation";
 import { MouseEventHandler, useEffect, useState } from "react";
 import { useForm, useFormState } from "react-hook-form";
 import { toast } from "sonner";
@@ -21,6 +21,8 @@ const MarketplaceNew = () => {
   const [step, setStep] = useState(1);
   const [images, setImages] = useState<File[]>([]);
   const { user } = useUser();
+
+  if (!user) redirect("/");
 
   const form = useForm<ItemCreateSchema>({
     defaultValues: {
@@ -142,7 +144,7 @@ const MarketplaceNew = () => {
             views: 112,
             images:
               images?.map((img) => URL.createObjectURL(img as File)) ?? [],
-            seller: user.id,
+            seller: user?.id ?? "",
           }}
           isPreview
         />
