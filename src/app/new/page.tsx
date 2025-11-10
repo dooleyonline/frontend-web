@@ -50,15 +50,16 @@ const MarketplaceNew = () => {
 
   const handleSubmit = async (values: ItemCreateSchema) => {
     let allUploaded = true;
-
-    images.forEach(async (img) => {
-      const { data, error } = await serverQuery(api.item.uploadImage(img));
-      if (error || !data) {
-        allUploaded = false;
-        return;
-      }
-      values.images.push(data);
-    });
+    values.images = await Promise.all(
+      images.map(async (img) => {
+        const { data, error } = await serverQuery(api.item.uploadImage(img));
+        if (error || !data) {
+          allUploaded = false;
+          return "";
+        }
+        return data;
+      })
+    );
 
     if (!allUploaded) {
       toast.error("Something went wrong!", {
