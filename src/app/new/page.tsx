@@ -142,7 +142,7 @@ const MarketplaceNew = () => {
             views: 112,
             images:
               images?.map((img) => URL.createObjectURL(img as File)) ?? [],
-            seller: user!.id,
+            seller: user.id,
           }}
           isPreview
         />
