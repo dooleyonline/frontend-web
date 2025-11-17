@@ -63,7 +63,10 @@ export const ItemModal = memo((props: ItemModalProps) => {
   const router = useRouter();
   const { user: currentUser } = useUser();
   const queryClient = useQueryClient();
-  const chatroomsQueryOptions = useMemo(() => api.chat.getChatrooms(), []);
+  const chatroomsQueryOptions = useMemo(
+    () => api.chat.getChatrooms(currentUser?.id),
+    [currentUser?.id],
+  );
   const sellerQuery = useQuery({
     ...api.user.get(item?.seller ?? ""),
     enabled: Boolean(item?.seller),

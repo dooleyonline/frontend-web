@@ -101,8 +101,8 @@ export type Chatroom = z.infer<typeof chatRoomSchema>;
 
 export const sendMessageInputSchema = z.object({
   chatroomId: z.string(),
-  senderId: z.string(),
   body: z.string().min(1),
+  senderId: z.string().optional(),
 });
 
 export type SendMessageInput = z.infer<typeof sendMessageInputSchema>;

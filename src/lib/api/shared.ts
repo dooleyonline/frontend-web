@@ -15,11 +15,11 @@ export type ApiQueryOptions<T> = {
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 3000,
+  timeout: 10000,
   withCredentials: true,
 });
 
-let queryClient = new QueryClient();
+export let queryClient = new QueryClient();
 
 export const serverQuery = async <T,>(query: ApiQueryOptions<T>) => {
   let data: T | null = null;
