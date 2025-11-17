@@ -126,7 +126,7 @@ export function SiteNavbar() {
             <NavigationMenuItem>
               <Button asChild variant={"default"}>
                 <Link href="/auth/sign-in" passHref>
-                  Sign In / Sign Up
+                  Sign In
                 </Link>
               </Button>
             </NavigationMenuItem>
