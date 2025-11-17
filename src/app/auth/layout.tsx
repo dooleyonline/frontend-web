@@ -24,7 +24,7 @@ const AuthLayout = ({ children }: PropsWithChildren) => {
       <motion.div
         layout
         className={cn(
-          "relative size-full rounded-4xl overflow-hidden",
+          "relative size-full rounded-4xl overflow-hidden z-50",
           isSignIn ? "order-1 lg:order-2" : "order-1"
         )}
       >
