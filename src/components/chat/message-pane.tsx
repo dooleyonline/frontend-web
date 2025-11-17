@@ -15,6 +15,7 @@ import {
   SmileIcon,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { buildChatroomTitle } from "@/lib/chat/title";
 import { buildGoogleStaticMapUrl, extractLinkPreviewCandidate } from "@/lib/chat/link-preview";
@@ -38,6 +39,9 @@ type MessagePaneProps = {
   currentUserId: string;
   sending: boolean;
   onSendMessage: (body: string) => Promise<boolean>;
+  onLoadOlderMessages?: (chatroomId: string) => Promise<void> | void;
+  hasMoreMessages?: boolean;
+  loadingOlderMessages?: boolean;
   onBack?: () => void;
   onOpenMap?: (chatroom: Chatroom) => void;
   onLeaveChatroom?: (chatroomId: string) => Promise<void> | void;
@@ -50,6 +54,9 @@ export const MessagePane = ({
   currentUserId,
   sending,
   onSendMessage,
+  onLoadOlderMessages,
+  hasMoreMessages = false,
+  loadingOlderMessages = false,
   onBack,
   onOpenMap,
   onLeaveChatroom,
@@ -127,11 +134,21 @@ export const MessagePane = ({
     return [...chatroom.messages].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
   }, [chatroom]);
 
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: sortedMessages.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 84,
+    overscan: 6,
+  });
+
+  const lastMessageId = sortedMessages.at(-1)?.id ?? null;
+
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [sortedMessages.length, chatroom?.id]);
+  }, [lastMessageId, chatroom?.id]);
 
   const handleOpenMap = () => {
     if (chatroom && onOpenMap) {
@@ -252,30 +269,74 @@ export const MessagePane = ({
       </header>
 
       <div
-        ref={viewportRef}
-        className="flex-1 min-h-0 max-h-[calc(100vh-280px)] space-y-4 overflow-y-auto px-3 py-5"
+        ref={(node) => {
+          viewportRef.current = node;
+          parentRef.current = node;
+        }}
+        className="flex-1 min-h-0 max-h-[calc(100vh-280px)] overflow-y-auto px-3 py-5"
       >
+        {chatroom && hasMoreMessages ? (
+          <div className="mb-3 flex justify-center">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={loadingOlderMessages}
+              onClick={async () => {
+                if (!chatroom.id || !onLoadOlderMessages) return;
+                const container = parentRef.current;
+                const prevHeight = container?.scrollHeight ?? 0;
+                const prevTop = container?.scrollTop ?? 0;
+                try {
+                  await onLoadOlderMessages(chatroom.id);
+                } finally {
+                  if (!container) return;
+                  await new Promise((resolve) => requestAnimationFrame(resolve));
+                  const newHeight = container.scrollHeight;
+                  container.scrollTop = newHeight - prevHeight + prevTop;
+                }
+              }}
+            >
+              {loadingOlderMessages ? "Loading messages..." : "Load older messages"}
+            </Button>
+          </div>
+        ) : null}
         <SystemNotice message="Avoid meeting in places without an emergency (the blue) tower." />
-        {sortedMessages.map((message, index) => {
-          const previous = sortedMessages[index - 1];
-          const isOwn = message.senderId === currentUserId;
-          const showAvatar =
-            !isOwn && (!previous || previous.senderId !== message.senderId);
+        <div
+          className="relative"
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const message = sortedMessages[virtualRow.index];
+            const previous = sortedMessages[virtualRow.index - 1];
+            const isOwn = message.senderId === currentUserId;
+            const showAvatar =
+              !isOwn && (!previous || previous.senderId !== message.senderId);
 
-          return (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              isOwn={isOwn}
-              showAvatar={showAvatar}
-              sender={
-                chatroom.participants.find(
-                  (participant) => participant.id === message.senderId,
-                ) ?? null
-              }
-            />
-          );
-        })}
+            return (
+              <div
+                key={message.id}
+                className="absolute left-0 right-0"
+                style={{
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <MessageBubble
+                  message={message}
+                  isOwn={isOwn}
+                  showAvatar={showAvatar}
+                  sender={
+                    chatroom?.participants.find(
+                      (participant) => participant.id === message.senderId,
+                    ) ?? null
+                  }
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <form

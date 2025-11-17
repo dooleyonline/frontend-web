@@ -20,6 +20,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
+import { CHATROOMS_QUERY_KEY } from "@/lib/api/chat";
 import { API_BASE_URL } from "@/lib/env";
 import { ChatMessage, Chatroom, chatMessageSchema } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -28,10 +29,10 @@ import {
   loadPendingChatMessage,
 } from "@/lib/chat/pending-message";
 
-const CHATROOMS_QUERY_KEY = ["chat", "chatrooms"] as const;
 const ACCESS_DENIED_MESSAGE = "You do not have access to this conversation.";
 const CHATROOM_NOT_FOUND_MESSAGE = "Conversation not found.";
 const CHATROOM_ID_PREFIX = "room-";
+const MESSAGES_PAGE_SIZE = 10;
 
 const removeTrailingSlash = (value: string) =>
   value.endsWith("/") ? value.slice(0, -1) : value;
@@ -41,7 +42,8 @@ const ensureWebSocketBaseUrl = () => {
     throw new Error("NEXT_PUBLIC_API_BASE_URL must be defined for chat WebSocket connection.");
   }
 
-  return removeTrailingSlash(API_BASE_URL);
+  const normalized = removeTrailingSlash(API_BASE_URL);
+  return normalized.replace(/^http/i, "ws");
 };
 
 const WS_BASE_URL = ensureWebSocketBaseUrl();
@@ -74,16 +76,96 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   const [isParticipantsDialogOpen, setIsParticipantsDialogOpen] = useState(false);
   const [participantsDialogChatroom, setParticipantsDialogChatroom] =
     useState<Chatroom | null>(null);
+  const [messagePagesByChatroom, setMessagePagesByChatroom] = useState<Record<string, number>>({});
+  const [hasMoreMessagesByChatroom, setHasMoreMessagesByChatroom] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const queryClient = useQueryClient();
   const invalidAccessToastShownRef = useRef(false);
   const meQuery = useQuery(api.auth.me());
   const currentUserId = meQuery.data?.id ?? null;
 
-  const chatroomsQueryOptions = api.chat.getChatrooms();
+  const previousChatroomsRef = useRef<Chatroom[] | undefined>(undefined);
+
+  const chatroomsQueryOptions = useMemo(
+    () => api.chat.getChatrooms(currentUserId ?? undefined),
+    [currentUserId],
+  );
   const chatroomListQuery = useQuery({
     ...chatroomsQueryOptions,
     enabled: Boolean(currentUserId),
+    onSuccess: (data) => {
+      const previous = previousChatroomsRef.current ?? queryClient.getQueryData<Chatroom[]>(
+        CHATROOMS_QUERY_KEY,
+      );
+      queryClient.setQueryData<Chatroom[]>(CHATROOMS_QUERY_KEY, () => {
+        if (!previous) return data;
+
+        const byId = new Map<string, Chatroom>();
+        previous.forEach((room) => byId.set(room.id, room));
+
+        const merged = data.map((room) => {
+          const existing = byId.get(room.id);
+          if (!existing) return room;
+
+          const combinedMessages: ChatMessage[] = [];
+          const seen = new Set<string>();
+          [...room.messages, ...existing.messages].forEach((message) => {
+            const key = message.id.toString();
+            if (seen.has(key)) return;
+            seen.add(key);
+            combinedMessages.push(message);
+          });
+          combinedMessages.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+
+          return {
+            ...room,
+            messages: combinedMessages,
+          };
+        });
+
+        const newIds = new Set(data.map((room) => room.id));
+        previous.forEach((room) => {
+          if (!newIds.has(room.id)) {
+            merged.push(room);
+          }
+        });
+
+        return merged.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      });
+    },
   });
+
+  useEffect(() => {
+    if (chatroomListQuery.isFetching) {
+      previousChatroomsRef.current = queryClient.getQueryData<Chatroom[]>(CHATROOMS_QUERY_KEY);
+    } else if (!chatroomListQuery.isLoading) {
+      previousChatroomsRef.current = undefined;
+    }
+  }, [chatroomListQuery.isFetching, chatroomListQuery.isLoading, queryClient]);
+
+  useEffect(() => {
+    if (!chatroomListQuery.data) return;
+    setMessagePagesByChatroom((previous) => {
+      const next = { ...previous };
+      for (const room of chatroomListQuery.data ?? []) {
+        if (next[room.id] === undefined) {
+          next[room.id] = 1;
+        }
+      }
+      return next;
+    });
+    setHasMoreMessagesByChatroom((previous) => {
+      const next = { ...previous };
+      for (const room of chatroomListQuery.data ?? []) {
+        if (next[room.id] === undefined) {
+          next[room.id] = true;
+        }
+      }
+      return next;
+    });
+  }, [chatroomListQuery.data]);
   const allChatrooms = useMemo(
     () => chatroomListQuery.data ?? [],
     [chatroomListQuery.data],
@@ -128,6 +210,32 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   const activeChatroomSlug = useMemo(() => {
     if (!activeChatroomId) return null;
     return getChatroomSlug(activeChatroomId);
+  }, [activeChatroomId]);
+
+  useEffect(() => {
+    if (!activeChatroomId) return;
+    queryClient.setQueryData<Chatroom[] | undefined>(CHATROOMS_QUERY_KEY, (previous) => {
+      if (!previous) return previous;
+      let updated = false;
+      const next = previous.map((room) => {
+        if (room.id !== activeChatroomId || room.unreadCount === 0) return room;
+        updated = true;
+        return { ...room, unreadCount: 0 };
+      });
+      return updated ? next : previous;
+    });
+  }, [activeChatroomId, chatroomListQuery.data, queryClient]);
+
+  useEffect(() => {
+    if (!activeChatroomId) return;
+    setHasMoreMessagesByChatroom((previous) => ({
+      ...previous,
+      [activeChatroomId]: previous[activeChatroomId] ?? true,
+    }));
+    setMessagePagesByChatroom((previous) => ({
+      ...previous,
+      [activeChatroomId]: previous[activeChatroomId] ?? 1,
+    }));
   }, [activeChatroomId]);
 
   const webSocketUrl = useMemo(() => {
@@ -344,6 +452,54 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     return chatrooms.find((chatroom) => chatroom.id === activeChatroomId) ?? null;
   }, [chatrooms, activeChatroomId]);
 
+  useEffect(() => {
+    if (!selectedChatroom) return;
+    if (selectedChatroom.messages.length > 0) return;
+    if (loadingOlderMessages) return;
+
+    setLoadingOlderMessages(true);
+    void (async () => {
+      try {
+        const messages = await api.chat.getMessagesPage(selectedChatroom.id, 1);
+        setHasMoreMessagesByChatroom((previous) => ({
+          ...previous,
+          [selectedChatroom.id]: messages.length >= MESSAGES_PAGE_SIZE,
+        }));
+        setMessagePagesByChatroom((previous) => ({
+          ...previous,
+          [selectedChatroom.id]: 1,
+        }));
+
+        queryClient.setQueryData<Chatroom[]>(CHATROOMS_QUERY_KEY, (previous) => {
+          if (!previous) return previous;
+          return previous.map((room) =>
+            room.id === selectedChatroom.id ? { ...room, messages } : room,
+          );
+        });
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to load messages.",
+        );
+      } finally {
+        setLoadingOlderMessages(false);
+      }
+    })();
+  }, [
+    selectedChatroom,
+    loadingOlderMessages,
+    queryClient,
+    setHasMoreMessagesByChatroom,
+    setMessagePagesByChatroom,
+  ]);
+
+  const currentHasMoreMessages = useMemo(
+    () =>
+      activeChatroomId
+        ? hasMoreMessagesByChatroom[activeChatroomId] ?? true
+        : false,
+    [activeChatroomId, hasMoreMessagesByChatroom],
+  );
+
   const handleChatroomSelect = (chatroomId: string) => {
     const chatroom = chatrooms.find((item) => item.id === chatroomId);
     if (!chatroom) {
@@ -432,6 +588,68 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
       cancelled = true;
     };
   }, [activeChatroomId, readyState, handleSendMessage]);
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!activeChatroomId) return;
+    if (loadingOlderMessages) return;
+    if (hasMoreMessagesByChatroom[activeChatroomId] === false) return;
+
+    const nextPage = (messagePagesByChatroom[activeChatroomId] ?? 1) + 1;
+    setLoadingOlderMessages(true);
+    try {
+      const olderMessages = await api.chat.getMessagesPage(activeChatroomId, nextPage);
+      if (olderMessages.length === 0) {
+        setHasMoreMessagesByChatroom((previous) => ({
+          ...previous,
+          [activeChatroomId]: false,
+        }));
+        setMessagePagesByChatroom((previous) => ({
+          ...previous,
+          [activeChatroomId]: nextPage,
+        }));
+        return;
+      }
+
+      setHasMoreMessagesByChatroom((previous) => ({
+        ...previous,
+        [activeChatroomId]: olderMessages.length >= MESSAGES_PAGE_SIZE,
+      }));
+
+      setMessagePagesByChatroom((previous) => ({
+        ...previous,
+        [activeChatroomId]: nextPage,
+      }));
+
+      queryClient.setQueryData<Chatroom[]>(CHATROOMS_QUERY_KEY, (previous) => {
+        if (!previous) return previous;
+        return previous.map((chatroom) => {
+          if (chatroom.id !== activeChatroomId) return chatroom;
+          const merged = [...olderMessages, ...chatroom.messages];
+          const seen = new Set<string>();
+          const deduped: ChatMessage[] = [];
+          for (const message of merged) {
+            if (seen.has(message.id)) continue;
+            seen.add(message.id);
+            deduped.push(message);
+          }
+          deduped.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+          return { ...chatroom, messages: deduped };
+        });
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load older messages.",
+      );
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [
+    activeChatroomId,
+    loadingOlderMessages,
+    hasMoreMessagesByChatroom,
+    messagePagesByChatroom,
+    queryClient,
+  ]);
 
   const handleLeaveChatroom = useCallback(
     async (chatroomId: string) => {
@@ -648,6 +866,9 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
               currentUserId={currentUserId}
               sending={isSending}
               onSendMessage={handleSendMessage}
+              onLoadOlderMessages={handleLoadOlderMessages}
+              hasMoreMessages={currentHasMoreMessages}
+              loadingOlderMessages={loadingOlderMessages}
               onBack={handleBackToList}
               onOpenMap={handleOpenMapDialog}
               onLeaveChatroom={handleLeaveChatroom}
