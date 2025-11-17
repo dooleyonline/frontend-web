@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { PropsWithChildren } from "react";
 
