@@ -13,32 +13,36 @@ import { LoadingButton } from "@/components/ui/loading-button";
 import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
-import { SignIn, signInSchema } from "@/lib/types";
+import { SignUp, signUpSchema } from "@/lib/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
-const SignInPage = () => {
+const SignUpPage = () => {
   const router = useRouter();
   const { user, revalidate } = useUser();
   const form = useForm({
-    resolver: zodResolver(signInSchema),
+    resolver: zodResolver(signUpSchema),
     defaultValues: {
       email: "",
       password: "",
+      firstName: "",
+      lastName: "",
     },
   });
 
-  const handleSignIn = async (params: SignIn) => {
-    const { error } = await serverQuery(api.auth.signIn(params));
+  const handleSignUp = async (params: SignUp) => {
+    const { error } = await serverQuery(api.auth.signUp(params));
     if (error) {
-      toast.error("Failed to sign in", {
+      toast.error("Failed to sign up", {
         description: "Please try again later",
       });
       return;
     }
+    // TODO: email verification
+    await serverQuery(api.auth.signIn(params));
     await revalidate();
     router.replace("/");
   };
@@ -51,9 +55,35 @@ const SignInPage = () => {
         <div className="p-4 mt-2">
           <Form {...form}>
             <form
-              onSubmit={form.handleSubmit(handleSignIn)}
+              onSubmit={form.handleSubmit(handleSignUp)}
               className="space-y-6"
             >
+              <div className="flex *:flex-1 gap-2">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John" type="text" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John" type="text" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={form.control}
                 name="email"
@@ -94,18 +124,18 @@ const SignInPage = () => {
                 isLoading={form.formState.isSubmitting}
                 className="w-full"
               >
-                {user ? `Signed in as ${user.email}` : "Sign In"}
+                {user ? `Signed in as ${user.email}` : "Sign Up"}
               </LoadingButton>
             </form>
           </Form>
 
           <p className="mt-4 text-sm text-center">
-            Don't have an account?{" "}
+            Already have an account?{" "}
             <Link
-              href="/auth/sign-up"
+              href="/auth/sign-in"
               className="font-medium underline text-primary"
             >
-              Sign up
+              Sign in
             </Link>
           </p>
         </div>
@@ -114,4 +144,4 @@ const SignInPage = () => {
   );
 };
 
-export default SignInPage;
+export default SignUpPage;

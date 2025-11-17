@@ -1,5 +1,5 @@
 import { User, userSchema } from "../types";
-import { SignIn } from "../types/auth";
+import { SignIn, SignUp } from "../types/auth";
 import { ApiQueryOptions, apiClient } from "./shared";
 
 export const me = (): ApiQueryOptions<User | null> => {
@@ -37,6 +37,19 @@ export const signOut = (): ApiQueryOptions<null> => {
     queryFn: async () => {
       await apiClient.post(url);
       return null;
+    },
+  };
+};
+
+export const signUp = (params: SignUp): ApiQueryOptions<User> => {
+  const url = "user";
+  return {
+    queryKey: [url],
+    queryFn: async () => {
+      const res = await apiClient.post(url, params);
+      const { data, error } = await userSchema.safeParseAsync(res.data);
+      if (error) throw new Error(error.message);
+      return data;
     },
   };
 };
