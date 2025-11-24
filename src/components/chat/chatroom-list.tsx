@@ -42,7 +42,7 @@ const getSenderName = (
   if (senderId === currentUserId) return "You";
   return (
     chatroom.participants.find((participant) => participant.id === senderId)
-      ?.displayName ?? "Unknown"
+      ?.displayName ?? senderId
   );
 };
 

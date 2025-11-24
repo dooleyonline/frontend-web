@@ -9,7 +9,7 @@ import { serverQuery } from "@/lib/api/shared";
 import { ItemCreateSchema } from "@/lib/types";
 import { redirect, useRouter } from "next/navigation";
 import { MouseEventHandler, useEffect, useState } from "react";
-import { useForm, useFormState } from "react-hook-form";
+import { useForm, useFormState, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Step1 } from "./(form)/step-1";
@@ -39,6 +39,7 @@ const MarketplaceNew = () => {
   });
 
   const { isDirty } = useFormState({ control: form.control });
+  const watchedForm = useWatch({ control: form.control });
 
   useEffect(() => {
     // Handle browser refresh/close
@@ -50,6 +51,7 @@ const MarketplaceNew = () => {
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
   const handleSubmit = async (values: ItemCreateSchema) => {
@@ -137,7 +139,7 @@ const MarketplaceNew = () => {
         <ItemModal
           item={{
             id: -1,
-            ...form.watch(),
+            ...watchedForm,
             postedAt: new Date(),
             soldAt: null,
             placeholder: null,

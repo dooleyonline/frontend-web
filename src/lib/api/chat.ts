@@ -6,12 +6,12 @@ import {
   Chatroom,
   SendMessageInput,
   chatMessageSchema,
-  chatParticipantSchema,
   sendMessageInputSchema,
   userSchema,
   User,
 } from "@/lib/types";
 
+import { API_BASE_URL } from "../env";
 import { ApiQueryOptions, apiClient } from "./shared";
 
 const chatroomIdResponseSchema = z
@@ -26,11 +26,7 @@ const participantResponseSchema = z
     room_id: z.string(),
     user_id: z.string(),
     last_read_message_id: z
-      .object({
-        int64: z.union([z.number(), z.string()]).optional(),
-        valid: z.boolean(),
-      })
-      .or(z.null())
+      .union([z.number(), z.string(), z.null()])
       .optional(),
     user: z
       .object({
@@ -60,33 +56,197 @@ const messageResponseSchema = z
 
 const messagesResponseSchema = z.array(messageResponseSchema);
 
-const chatRoomSummarySchema = z
-  .object({
-    id: z.string().optional(),
-    room_id: z.string().optional(),
-    roomId: z.string().optional(),
-    updatedAt: z.string().optional(),
-    updated_at: z.string().optional(),
-    unreadCount: z.number().int().nonnegative().optional(),
-    unread_count: z.number().int().nonnegative().optional(),
-    participants: z.unknown().optional(),
-    messages: z.unknown().optional(),
-  })
-  .passthrough();
+const roomsResponseSchema = z.array(
+  z
+    .object({
+      room_id: z.string(),
+      roomId: z.string().optional(),
+      title: z.string().optional(),
+      last_message: messageResponseSchema.nullable().optional(),
+      last_read_message_id: z.union([z.number(), z.string(), z.null()]).optional(),
+      read_all: z.boolean().optional(),
+      readAll: z.boolean().optional(),
+    })
+    .passthrough(),
+);
+type RoomsResponse = z.infer<typeof roomsResponseSchema>;
 
-type RestChatroomSummary = {
-  id: string;
-  updatedAt?: string;
-  unreadCount?: number;
-  participants?: ChatParticipant[];
-  messages?: ChatMessage[];
+export const CHATROOMS_QUERY_KEY = ["chat", "chatrooms"] as const;
+
+const isTempId = (value: string) => value.startsWith("temp-");
+const isSameMessage = (a: ChatMessage, b: ChatMessage) => {
+  const roomA = a.roomId ?? a.chatroomId;
+  const roomB = b.roomId ?? b.chatroomId;
+  return (
+    roomA === roomB &&
+    a.senderId === b.senderId &&
+    a.body === b.body &&
+    Math.abs(a.sentAt.getTime() - b.sentAt.getTime()) < 2000
+  );
+};
+
+export const mergeMessages = (
+  incoming: ChatMessage[],
+  existing: ChatMessage[] = [],
+): ChatMessage[] => {
+  const merged: ChatMessage[] = [];
+
+  const upsert = (message: ChatMessage) => {
+    const index = merged.findIndex(
+      (item) => item.id === message.id || isSameMessage(item, message),
+    );
+    if (index === -1) {
+      merged.push(message);
+      return;
+    }
+
+    const current = merged[index];
+    if (isTempId(current.id) && !isTempId(message.id)) {
+      merged[index] = message;
+    }
+  };
+
+  [...existing, ...incoming].forEach(upsert);
+  return merged.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
 };
 
 type ChatroomExtras = {
   updatedAt?: string | Date;
   unreadCount?: number;
+  title?: string;
   participants?: ChatParticipant[];
   messages?: ChatMessage[];
+  isGroup?: boolean;
+};
+
+const userParticipantCache = new Map<string, ChatParticipant>();
+
+const toParticipantFromUser = (user: User): ChatParticipant => {
+  const nameParts = [
+    user.firstName?.trim() ?? "",
+    user.lastName?.trim() ?? "",
+  ].filter(Boolean);
+  const displayName =
+    nameParts.length > 0 ? nameParts.join(" ") : user.email ?? user.id;
+
+  return {
+    id: user.id,
+    displayName,
+    username: user.email ?? user.id,
+    avatarUrl: "",
+    isOnline: false,
+  };
+};
+
+const hydrateUsersAsParticipants = async (
+  userIds: string[],
+): Promise<ChatParticipant[]> => {
+  const uniqueIds = Array.from(new Set(userIds)).filter((id) => !!id);
+
+  const cached: ChatParticipant[] = [];
+  const toFetch: string[] = [];
+  uniqueIds.forEach((id) => {
+    const cachedParticipant = userParticipantCache.get(id);
+    if (cachedParticipant) {
+      cached.push(cachedParticipant);
+    } else {
+      toFetch.push(id);
+    }
+  });
+
+  const results = await Promise.all(
+    toFetch.map(async (userId) => {
+      try {
+        const res = await apiClient.get(`user/${userId}`);
+        const user = userSchema.parse(res.data);
+        const participant = toParticipantFromUser(user);
+        userParticipantCache.set(userId, participant);
+        return participant;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return [...cached, ...(results.filter(Boolean) as ChatParticipant[])];
+};
+
+export const buildChatroomsFromRooms = async (
+  rooms: RoomsResponse,
+  existingChatrooms?: Chatroom[],
+  options?: { currentUserId?: string },
+): Promise<Chatroom[]> => {
+  const byId = new Map<string, Chatroom>();
+  existingChatrooms?.forEach((room) => byId.set(room.id, room));
+
+  const chatrooms = await Promise.all(
+    rooms.map(async (room) => {
+      const roomId = room.room_id ?? room.roomId;
+      if (!roomId) {
+        throw new Error("Room id missing in chat rooms payload");
+      }
+
+      const existing = byId.get(roomId);
+      const lastMessage = room.last_message ? chatMessageSchema.parse(room.last_message) : null;
+
+      const messagesPromise =
+        existing?.messages?.length && existing.messages.length > 0
+          ? Promise.resolve(existing.messages)
+          : fetchMessages(roomId);
+
+      const [baseMessages] = await Promise.all([
+        messagesPromise,
+      ]);
+
+      const participantsById = new Map<string, ChatParticipant>();
+      (existing?.participants ?? []).forEach((p) => participantsById.set(p.id, p));
+
+      const senderId = lastMessage?.senderId ?? lastMessage?.sentBy;
+      if (
+        senderId &&
+        senderId !== options?.currentUserId &&
+        !participantsById.has(senderId) &&
+        userParticipantCache.has(senderId)
+      ) {
+        participantsById.set(senderId, userParticipantCache.get(senderId)!);
+      } else if (
+        senderId &&
+        senderId !== options?.currentUserId &&
+        !participantsById.has(senderId)
+      ) {
+        const hydrated = await hydrateUsersAsParticipants([senderId]);
+        hydrated.forEach((p) => participantsById.set(p.id, p));
+      }
+
+      const participants = Array.from(participantsById.values());
+
+      const mergedMessagesWithExisting = mergeMessages(baseMessages, existing?.messages ?? []);
+      const mergedMessages = lastMessage
+        ? mergeMessages([lastMessage], mergedMessagesWithExisting)
+        : mergedMessagesWithExisting;
+      const currentUserLastRead =
+        room.last_read_message_id ??
+        participants.find((participant) => participant.id === options?.currentUserId)
+          ?.lastReadMessageId ??
+        null;
+
+      const extras: ChatroomExtras = {
+        unreadCount: computeUnreadCount(
+          mergedMessages,
+          currentUserLastRead,
+          room.read_all ?? room.readAll,
+          options?.currentUserId,
+        ),
+        title: room.title ?? existing?.title,
+        isGroup: existing?.isGroup,
+        updatedAt: mergedMessages.at(-1)?.sentAt ?? existing?.updatedAt,
+      };
+
+      return buildChatroom(roomId, participants, mergedMessages, extras);
+    }),
+  );
+
+  return chatrooms.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 };
 
 export type CreateChatroomInput = {
@@ -124,102 +284,11 @@ const toChatParticipant = (
     username: user?.email ?? participant.user_id,
     avatarUrl: "",
     isOnline: false,
-  };
-};
-
-const parseSummaryParticipants = (
-  payload: unknown,
-): ChatParticipant[] | undefined => {
-  if (!payload) return undefined;
-
-  try {
-    return z.array(chatParticipantSchema).parse(payload);
-  } catch {
-    try {
-      const parsed = participantsResponseSchema.parse(payload);
-      return parsed.map(toChatParticipant);
-    } catch {
-      return undefined;
-    }
-  }
-};
-
-const parseSummaryMessages = (payload: unknown): ChatMessage[] | undefined => {
-  if (!payload) return undefined;
-
-  if (Array.isArray(payload)) {
-    try {
-      const parsed = messagesResponseSchema.parse(payload);
-      return parsed.map((message) => chatMessageSchema.parse(message));
-    } catch {
-      try {
-        return payload.map((candidate) => {
-          if (!candidate || typeof candidate !== "object") {
-            throw new Error("Invalid message candidate");
-          }
-
-          const record = candidate as Record<string, unknown>;
-          const rawMessage = {
-            id: record.id ?? record.messageId ?? record.message_id,
-            room_id:
-              record.room_id ??
-              record.roomId ??
-              record.roomID ??
-              record.chatroomId ??
-              record.chatRoomId,
-            sent_by: record.sent_by ?? record.senderId ?? record.sentBy,
-            body: record.body,
-            edited:
-              typeof record.edited === "boolean"
-                ? record.edited
-                : Boolean(record.edited),
-            sent_at:
-              record.sent_at ??
-              record.sentAt ??
-              record.created_at ??
-              record.createdAt,
-          };
-
-          if (
-            rawMessage.sent_at instanceof Date &&
-            typeof rawMessage.sent_at.toISOString === "function"
-          ) {
-            rawMessage.sent_at = rawMessage.sent_at.toISOString();
-          }
-
-          return chatMessageSchema.parse(rawMessage);
-        });
-      } catch {
-        return undefined;
-      }
-    }
-  }
-
-  try {
-    const parsed = messagesResponseSchema.parse(payload);
-    return parsed.map((message) => chatMessageSchema.parse(message));
-  } catch {
-    return undefined;
-  }
-};
-
-const normalizeChatroomSummary = (item: unknown): RestChatroomSummary => {
-  if (typeof item === "string") {
-    return { id: item };
-  }
-
-  const parsed = chatRoomSummarySchema.parse(item);
-  const id = parsed.id ?? parsed.room_id ?? parsed.roomId;
-  if (!id) {
-    throw new Error("Chatroom summary is missing an id field.");
-  }
-
-  return {
-    id,
-    updatedAt: parsed.updatedAt ?? parsed.updated_at,
-    unreadCount: parsed.unreadCount ?? parsed.unread_count,
-    participants: parseSummaryParticipants(parsed.participants),
-    messages: parseSummaryMessages(parsed.messages),
+    lastReadMessageId:
+      typeof participant.last_read_message_id === "number" ||
+      typeof participant.last_read_message_id === "string"
+        ? participant.last_read_message_id
+        : null,
   };
 };
 
@@ -286,13 +355,47 @@ const fetchParticipants = async (chatroomId: string): Promise<ChatParticipant[]>
   });
 };
 
-const fetchMessages = async (chatroomId: string): Promise<ChatMessage[]> => {
-  const response = await apiClient.get(`chat/${chatroomId}/messages`);
+export const getParticipants = fetchParticipants;
+
+export const getMessagesPage = async (
+  chatroomId: string,
+  page = 1,
+): Promise<ChatMessage[]> => {
+  const response = await apiClient.get(`chat/${chatroomId}/messages`, {
+    params: { page },
+  });
   const payload = messagesResponseSchema.parse(response.data);
   const messages = payload.map((message) => chatMessageSchema.parse(message));
   return messages.sort(
     (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
   );
+};
+
+const fetchMessages = async (chatroomId: string): Promise<ChatMessage[]> => {
+  return getMessagesPage(chatroomId, 1);
+};
+
+const computeUnreadCount = (
+  messages: ChatMessage[],
+  lastReadMessageId?: string | number | null,
+  readAll?: boolean,
+  currentUserId?: string,
+): number => {
+  if (readAll) return 0;
+  if (lastReadMessageId === null || typeof lastReadMessageId === "undefined") {
+    return messages.filter((message) => message.senderId !== currentUserId).length;
+  }
+
+  const lastRead = Number(lastReadMessageId);
+  if (!Number.isFinite(lastRead)) {
+    return messages.filter((message) => message.senderId !== currentUserId).length;
+  }
+
+  return messages.filter((message) => {
+    const id = Number(message.id);
+    if (message.senderId === currentUserId) return false;
+    return Number.isFinite(id) && id > lastRead;
+  }).length;
 };
 
 const buildChatroom = (
@@ -313,7 +416,8 @@ const buildChatroom = (
 
   return {
     id: chatroomId,
-    isGroup: participants.length > 2,
+    title: extras.title,
+    isGroup: extras.isGroup ?? participants.length > 2,
     updatedAt,
     unreadCount: extras.unreadCount ?? 0,
     participants,
@@ -327,8 +431,7 @@ const fetchChatroom = async (
 ): Promise<Chatroom> => {
   const participants =
     extras.participants ?? (await fetchParticipants(chatroomId));
-  const messages =
-    extras.messages ?? (await fetchMessages(chatroomId));
+  const messages = extras.messages ?? (await fetchMessages(chatroomId));
 
   return buildChatroom(chatroomId, participants, messages, extras);
 };
@@ -344,47 +447,13 @@ const getMessageResourceId = (value: string | number): string => {
   return value;
 };
 
-export const getChatrooms = (): ApiQueryOptions<Chatroom[]> => ({
-  queryKey: ["chat", "chatrooms"],
+export const getChatrooms = (
+  currentUserId?: string,
+): ApiQueryOptions<Chatroom[]> => ({
+  queryKey: CHATROOMS_QUERY_KEY,
   queryFn: async () => {
-    const response = await apiClient.get("chat/rooms");
-    const data = response.data ?? null;
-    const dataRecord =
-      typeof data === "object" && data !== null
-        ? (data as Record<string, unknown>)
-        : undefined;
-    const rawRooms = Array.isArray(data)
-      ? data
-      : dataRecord && Array.isArray(dataRecord.rooms)
-      ? (dataRecord.rooms as unknown[])
-      : dataRecord && Array.isArray(dataRecord.data)
-      ? (dataRecord.data as unknown[])
-      : undefined;
-
-    if (!rawRooms) {
-      throw new Error("Expected chat rooms response to contain an array of rooms.");
-    }
-
-    const summaries = rawRooms.map(normalizeChatroomSummary);
-
-    const chatrooms = await Promise.all(
-      summaries.map(async (summary) => {
-        if (summary.participants && summary.messages) {
-          return buildChatroom(
-            summary.id,
-            summary.participants,
-            summary.messages,
-            summary,
-          );
-        }
-
-        return fetchChatroom(summary.id, summary);
-      }),
-    );
-
-    return chatrooms.sort(
-      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
-    );
+    const rooms = await fetchRoomsOnce();
+    return buildChatroomsFromRooms(rooms, undefined, { currentUserId });
   },
 });
 
@@ -426,22 +495,68 @@ export const sendMessage = async (
   input: SendMessageInput,
 ): Promise<ChatMessage> => {
   const payload = sendMessageInputSchema.parse(input);
+  const url = toWebsocketUrl(`/chat/${payload.chatroomId}/ws`);
 
-  const response = await apiClient.post(`chat/${payload.chatroomId}/messages`, {
-    body: payload.body,
+  return new Promise<ChatMessage>((resolve, reject) => {
+    const socket = new WebSocket(url);
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        socket.close();
+        reject(new Error("Timed out waiting for message acknowledgement."));
+      }
+    }, 5000);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close();
+      }
+    };
+
+    socket.addEventListener("open", () => {
+      socket.send(payload.body);
+    });
+
+    socket.addEventListener("message", (event) => {
+      if (settled) return;
+      try {
+        const parsed = chatMessageSchema.parse(JSON.parse(event.data));
+        if (parsed.roomId === payload.chatroomId) {
+          settled = true;
+          cleanup();
+          resolve(parsed);
+        }
+      } catch {
+        // ignore non-message payloads
+      }
+    });
+
+    socket.addEventListener("error", () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("Failed to send message over WebSocket."));
+    });
+
+    socket.addEventListener("close", () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("WebSocket closed before message was acknowledged."));
+    });
   });
-  return chatMessageSchema.parse(response.data);
 };
 
 export const updateMessage = async ({
   messageId,
   body,
-}: UpdateMessageInput): Promise<ChatMessage> => {
+}: UpdateMessageInput): Promise<void> => {
   const messageResourceId = getMessageResourceId(messageId);
-  const response = await apiClient.patch(`chat/messages/${messageResourceId}`, {
+  await apiClient.patch(`chat/messages/${messageResourceId}`, {
     body,
   });
-  return chatMessageSchema.parse(response.data);
 };
 
 export const deleteMessage = async (
@@ -450,4 +565,99 @@ export const deleteMessage = async (
 ): Promise<void> => {
   const messageResourceId = getMessageResourceId(messageId);
   await apiClient.delete(`chat/messages/${messageResourceId}`);
+};
+
+const toWebsocketUrl = (path: string): string => {
+  const base = API_BASE_URL.replace(/\/$/, "");
+  return `${base.replace(/^http/i, "ws")}/${path.replace(/^\//, "")}`;
+};
+
+const fetchRoomsOnce = async (): Promise<RoomsResponse> => {
+  const response = await fetch(`${API_BASE_URL.replace(/\/$/, "")}/chat/rooms`, {
+    method: "GET",
+    headers: {
+      Accept: "text/event-stream",
+    },
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch chat rooms: ${response.status}`);
+  }
+
+  if (!response.body) {
+    throw new Error("No response body when fetching chat rooms.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const delimiterIndex = buffer.indexOf("\n\n");
+    if (delimiterIndex === -1) {
+      continue;
+    }
+
+    const chunk = buffer.slice(0, delimiterIndex);
+    buffer = buffer.slice(delimiterIndex + 2);
+
+    const dataLine = chunk
+      .split("\n")
+      .find((line) => line.trim().startsWith("data:"));
+
+    if (!dataLine) {
+      continue;
+    }
+
+    const payloadRaw = dataLine.replace(/^data:\s*/, "");
+    try {
+      const parsed = JSON.parse(payloadRaw);
+      const rooms = roomsResponseSchema.parse(parsed);
+      reader.cancel();
+      return rooms;
+    } catch (err) {
+      console.error("Failed to parse chat rooms SSE payload", err);
+      continue;
+    }
+  }
+
+  throw new Error("No chat rooms data received from stream.");
+};
+
+export const subscribeToChatRoomsStream = (
+  onRooms: (rooms: RoomsResponse, rawPayload: string) => void | Promise<void>,
+  onError?: () => void,
+): (() => void) => {
+  const source = new EventSource(`${API_BASE_URL.replace(/\/$/, "")}/chat/rooms`, {
+    withCredentials: true,
+  });
+
+  const handler = async (event: MessageEvent) => {
+    const raw = event.data;
+    try {
+      const rooms = roomsResponseSchema.parse(JSON.parse(raw));
+      await onRooms(rooms, raw);
+    } catch (err) {
+      console.error("Failed to process chat rooms event", err);
+    }
+  };
+
+  source.addEventListener("rooms", handler);
+  source.onmessage = handler;
+
+  source.onerror = () => {
+    source.close();
+    if (onError) onError();
+  };
+
+  return () => {
+    source.removeEventListener("rooms", handler);
+    source.close();
+  };
 };
