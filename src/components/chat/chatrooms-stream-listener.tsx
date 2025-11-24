@@ -4,9 +4,9 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import api from "@/lib/api";
-import { CHATROOMS_QUERY_KEY } from "@/lib/api/chat";
+import { CHATROOMS_QUERY_KEY, mergeMessages } from "@/lib/api/chat";
 import { useUser } from "@/hooks/use-user";
-import { ChatMessage, Chatroom } from "@/lib/types";
+import { Chatroom } from "@/lib/types";
 
 const RETRY_DELAY_MS = 3000;
 
@@ -62,18 +62,9 @@ export const ChatroomsStreamListener = () => {
                 const existing = byId.get(room.id);
                 if (!existing) return room;
 
-                const combinedMessages: ChatMessage[] = [];
-                const seen = new Set<string>();
-                [...room.messages, ...existing.messages].forEach((msg) => {
-                  if (seen.has(msg.id)) return;
-                  seen.add(msg.id);
-                  combinedMessages.push(msg);
-                });
-                combinedMessages.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
-
                 return {
                   ...room,
-                  messages: combinedMessages,
+                  messages: mergeMessages(room.messages, existing.messages),
                 };
               });
 

@@ -14,6 +14,7 @@ export const chatParticipantSchema = z.object({
   username: z.string().optional(),
   avatarUrl: urlSchema,
   isOnline: z.boolean().optional(),
+  lastReadMessageId: z.union([z.string(), z.number()]).nullable().optional(),
 });
 
 export type ChatParticipant = z.infer<typeof chatParticipantSchema>;
@@ -28,7 +29,25 @@ const chatMessageJsonSchema = z.object({
 });
 
 export const chatMessageSchema = chatMessageJsonSchema.transform((data) => {
-  const id = typeof data.id === "number" ? data.id.toString() : data.id;
+  const rawId = data.id;
+  const numericId =
+    typeof rawId === "number"
+      ? rawId
+      : typeof rawId === "string" && rawId.trim().length > 0
+        ? Number(rawId)
+        : NaN;
+  const hasUsableId =
+    (typeof rawId === "string" && rawId.trim().length > 0 && rawId !== "0") ||
+    (Number.isFinite(numericId) && numericId !== 0);
+  const fallbackId = `temp-${data.sent_by ?? "user"}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
+  const id =
+    typeof rawId === "number"
+      ? hasUsableId
+        ? rawId.toString()
+        : fallbackId
+      : hasUsableId
+        ? rawId
+        : fallbackId;
   const chatroomId = data.room_id;
   const senderId = data.sent_by;
   const rawSentAt = data.sent_at;
@@ -60,6 +79,7 @@ const chatRoomJsonSchema = z.object({
   id: z.string(),
   updatedAt: isoDateSchema,
   unreadCount: z.number().int().nonnegative(),
+  title: z.string().nullable().optional(),
   participants: z.array(z.union([z.string(), chatParticipantSchema])),
   messages: z.array(chatMessageJsonSchema),
 });
@@ -89,6 +109,7 @@ export const chatRoomSchema = chatRoomJsonSchema.transform((data) => {
 
   return {
     id: data.id,
+    title: data.title ?? undefined,
     isGroup: participants.length > 2,
     updatedAt: new Date(data.updatedAt),
     unreadCount: data.unreadCount,

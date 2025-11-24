@@ -129,6 +129,22 @@ export const MessagePane = ({
     return `${totalMembers} member${totalMembers === 1 ? '' : 's'} - ${namesLabel}${remainderLabel}`;
   }, [chatroom, otherParticipants]);
 
+  const participantsLabel = useMemo(() => {
+    if (!chatroom) return "";
+    const names = chatroom.participants
+      .filter((participant) => participant.id !== currentUserId)
+      .map((participant) =>
+        participant.displayName?.trim() ||
+        participant.username?.trim() ||
+        participant.id,
+      )
+      .filter(Boolean) as string[];
+
+    if (names.length === 0) return "";
+    const visible = names.slice(0, 5);
+    return names.length > 5 ? `${visible.join(", ")} ...` : visible.join(", ");
+  }, [chatroom, currentUserId]);
+
   const sortedMessages = useMemo(() => {
     if (!chatroom) return [];
     return [...chatroom.messages].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
@@ -199,7 +215,7 @@ export const MessagePane = ({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <header className="flex items-center gap-3 border-b px-3 py-3">
         <Button
           type="button"
@@ -231,7 +247,7 @@ export const MessagePane = ({
             {conversationTitle}
           </span>
           <span className="line-clamp-1 text-xs text-muted-foreground">
-            {conversationSubtitle}
+            {participantsLabel || conversationSubtitle}
           </span>
         </div>
         {onLeaveChatroom || onOpenParticipants ? (
@@ -273,33 +289,39 @@ export const MessagePane = ({
           viewportRef.current = node;
           parentRef.current = node;
         }}
-        className="flex-1 min-h-0 max-h-[calc(100vh-280px)] overflow-y-auto px-3 py-5"
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-5"
       >
-        {chatroom && hasMoreMessages ? (
-          <div className="mb-3 flex justify-center">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={loadingOlderMessages}
-              onClick={async () => {
-                if (!chatroom.id || !onLoadOlderMessages) return;
-                const container = parentRef.current;
-                const prevHeight = container?.scrollHeight ?? 0;
-                const prevTop = container?.scrollTop ?? 0;
-                try {
-                  await onLoadOlderMessages(chatroom.id);
-                } finally {
-                  if (!container) return;
-                  await new Promise((resolve) => requestAnimationFrame(resolve));
-                  const newHeight = container.scrollHeight;
-                  container.scrollTop = newHeight - prevHeight + prevTop;
-                }
-              }}
-            >
-              {loadingOlderMessages ? "Loading messages..." : "Load older messages"}
-            </Button>
-          </div>
+        {chatroom ? (
+          hasMoreMessages ? (
+            <div className="mb-3 flex justify-center">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={loadingOlderMessages}
+                onClick={async () => {
+                  if (!chatroom.id || !onLoadOlderMessages) return;
+                  const container = parentRef.current;
+                  const prevHeight = container?.scrollHeight ?? 0;
+                  const prevTop = container?.scrollTop ?? 0;
+                  try {
+                    await onLoadOlderMessages(chatroom.id);
+                  } finally {
+                    if (!container) return;
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                    const newHeight = container.scrollHeight;
+                    container.scrollTop = newHeight - prevHeight + prevTop;
+                  }
+                }}
+              >
+                {loadingOlderMessages ? "Loading messages..." : "Load older messages"}
+              </Button>
+            </div>
+          ) : (
+            <div className="mb-3 flex justify-center text-xs text-muted-foreground">
+              You have reached the start of the conversation.
+            </div>
+          )
         ) : null}
         <SystemNotice message="Avoid meeting in places without an emergency (the blue) tower." />
         <div
@@ -319,6 +341,7 @@ export const MessagePane = ({
               <div
                 key={message.id}
                 className="absolute left-0 right-0"
+                ref={rowVirtualizer.measureElement}
                 style={{
                   transform: `translateY(${virtualRow.start}px)`,
                 }}

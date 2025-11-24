@@ -20,6 +20,9 @@ export const buildChatroomTitle = (
   chatroom: Chatroom,
   currentUserId: string,
 ): string => {
+  if (chatroom.title && chatroom.title.trim().length > 0) {
+    return chatroom.title.trim();
+  }
   const otherNames = buildParticipantNames(chatroom, currentUserId);
 
   if (!chatroom.isGroup) {

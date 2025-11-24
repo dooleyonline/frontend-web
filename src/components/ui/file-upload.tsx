@@ -10,6 +10,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -270,7 +271,7 @@ export const FileUploaderContent = forwardRef<
         ref={ref}
         className={cn(
           "flex rounded-xl gap-1",
-          orientation === "horizontal" ? "flex-raw flex-wrap" : "flex-col",
+          orientation === "horizontal" ? "flex-row flex-wrap" : "flex-col",
           className
         )}
       >
@@ -286,7 +287,6 @@ export const FileUploaderItem = forwardRef<
   HTMLDivElement,
   { index: number } & React.HTMLAttributes<HTMLDivElement>
 >(({ className, index, children, ...props }, ref) => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { activeIndex } = useFileUpload();
   const isSelected = index === activeIndex;
   return (
@@ -322,7 +322,14 @@ export const FileInput = forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, children, ...props }, ref) => {
   const { dropzoneState, isFileTooBig, isLOF } = useFileUpload();
-  const rootProps = isLOF ? {} : dropzoneState.getRootProps();
+  const rootProps = useMemo(
+    () => (isLOF ? {} : dropzoneState.getRootProps()),
+    [dropzoneState, isLOF],
+  );
+  const inputProps = useMemo(
+    () => dropzoneState.getInputProps({ disabled: isLOF }),
+    [dropzoneState, isLOF],
+  );
   return (
     <div
       ref={ref}
@@ -348,9 +355,7 @@ export const FileInput = forwardRef<
         {children}
       </div>
       <Input
-        ref={dropzoneState.inputRef}
-        disabled={isLOF}
-        {...dropzoneState.getInputProps()}
+        {...inputProps}
         className={`${isLOF ? "cursor-not-allowed" : ""}`}
       />
     </div>

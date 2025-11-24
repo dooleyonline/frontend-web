@@ -6,7 +6,6 @@ import {
   Chatroom,
   SendMessageInput,
   chatMessageSchema,
-  chatParticipantSchema,
   sendMessageInputSchema,
   userSchema,
   User,
@@ -60,10 +59,10 @@ const messagesResponseSchema = z.array(messageResponseSchema);
 const roomsResponseSchema = z.array(
   z
     .object({
-      room_id: z.string().optional(),
+      room_id: z.string(),
       roomId: z.string().optional(),
-      user_id: z.string().optional(),
-      userId: z.string().optional(),
+      title: z.string().optional(),
+      last_message: messageResponseSchema.nullable().optional(),
       last_read_message_id: z.union([z.number(), z.string(), z.null()]).optional(),
       read_all: z.boolean().optional(),
       readAll: z.boolean().optional(),
@@ -74,11 +73,102 @@ type RoomsResponse = z.infer<typeof roomsResponseSchema>;
 
 export const CHATROOMS_QUERY_KEY = ["chat", "chatrooms"] as const;
 
+const isTempId = (value: string) => value.startsWith("temp-");
+const isSameMessage = (a: ChatMessage, b: ChatMessage) => {
+  const roomA = a.roomId ?? a.chatroomId;
+  const roomB = b.roomId ?? b.chatroomId;
+  return (
+    roomA === roomB &&
+    a.senderId === b.senderId &&
+    a.body === b.body &&
+    Math.abs(a.sentAt.getTime() - b.sentAt.getTime()) < 2000
+  );
+};
+
+export const mergeMessages = (
+  incoming: ChatMessage[],
+  existing: ChatMessage[] = [],
+): ChatMessage[] => {
+  const merged: ChatMessage[] = [];
+
+  const upsert = (message: ChatMessage) => {
+    const index = merged.findIndex(
+      (item) => item.id === message.id || isSameMessage(item, message),
+    );
+    if (index === -1) {
+      merged.push(message);
+      return;
+    }
+
+    const current = merged[index];
+    if (isTempId(current.id) && !isTempId(message.id)) {
+      merged[index] = message;
+    }
+  };
+
+  [...existing, ...incoming].forEach(upsert);
+  return merged.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+};
+
 type ChatroomExtras = {
   updatedAt?: string | Date;
   unreadCount?: number;
+  title?: string;
   participants?: ChatParticipant[];
   messages?: ChatMessage[];
+  isGroup?: boolean;
+};
+
+const userParticipantCache = new Map<string, ChatParticipant>();
+
+const toParticipantFromUser = (user: User): ChatParticipant => {
+  const nameParts = [
+    user.firstName?.trim() ?? "",
+    user.lastName?.trim() ?? "",
+  ].filter(Boolean);
+  const displayName =
+    nameParts.length > 0 ? nameParts.join(" ") : user.email ?? user.id;
+
+  return {
+    id: user.id,
+    displayName,
+    username: user.email ?? user.id,
+    avatarUrl: "",
+    isOnline: false,
+  };
+};
+
+const hydrateUsersAsParticipants = async (
+  userIds: string[],
+): Promise<ChatParticipant[]> => {
+  const uniqueIds = Array.from(new Set(userIds)).filter((id) => !!id);
+
+  const cached: ChatParticipant[] = [];
+  const toFetch: string[] = [];
+  uniqueIds.forEach((id) => {
+    const cachedParticipant = userParticipantCache.get(id);
+    if (cachedParticipant) {
+      cached.push(cachedParticipant);
+    } else {
+      toFetch.push(id);
+    }
+  });
+
+  const results = await Promise.all(
+    toFetch.map(async (userId) => {
+      try {
+        const res = await apiClient.get(`user/${userId}`);
+        const user = userSchema.parse(res.data);
+        const participant = toParticipantFromUser(user);
+        userParticipantCache.set(userId, participant);
+        return participant;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return [...cached, ...(results.filter(Boolean) as ChatParticipant[])];
 };
 
 export const buildChatroomsFromRooms = async (
@@ -97,29 +187,58 @@ export const buildChatroomsFromRooms = async (
       }
 
       const existing = byId.get(roomId);
+      const lastMessage = room.last_message ? chatMessageSchema.parse(room.last_message) : null;
 
-      const [fetchedMessages, participants] = await Promise.all([
-        fetchMessages(roomId),
-        fetchParticipants(roomId),
+      const messagesPromise =
+        existing?.messages?.length && existing.messages.length > 0
+          ? Promise.resolve(existing.messages)
+          : fetchMessages(roomId);
+
+      const [baseMessages] = await Promise.all([
+        messagesPromise,
       ]);
 
-      const mergedMessages: ChatMessage[] = [];
-      const seen = new Set<string>();
-      [...fetchedMessages, ...(existing?.messages ?? [])].forEach((message) => {
-        const key = message.id.toString();
-        if (seen.has(key)) return;
-        seen.add(key);
-        mergedMessages.push(message);
-      });
-      mergedMessages.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+      const participantsById = new Map<string, ChatParticipant>();
+      (existing?.participants ?? []).forEach((p) => participantsById.set(p.id, p));
+
+      const senderId = lastMessage?.senderId ?? lastMessage?.sentBy;
+      if (
+        senderId &&
+        senderId !== options?.currentUserId &&
+        !participantsById.has(senderId) &&
+        userParticipantCache.has(senderId)
+      ) {
+        participantsById.set(senderId, userParticipantCache.get(senderId)!);
+      } else if (
+        senderId &&
+        senderId !== options?.currentUserId &&
+        !participantsById.has(senderId)
+      ) {
+        const hydrated = await hydrateUsersAsParticipants([senderId]);
+        hydrated.forEach((p) => participantsById.set(p.id, p));
+      }
+
+      const participants = Array.from(participantsById.values());
+
+      const mergedMessagesWithExisting = mergeMessages(baseMessages, existing?.messages ?? []);
+      const mergedMessages = lastMessage
+        ? mergeMessages([lastMessage], mergedMessagesWithExisting)
+        : mergedMessagesWithExisting;
+      const currentUserLastRead =
+        room.last_read_message_id ??
+        participants.find((participant) => participant.id === options?.currentUserId)
+          ?.lastReadMessageId ??
+        null;
 
       const extras: ChatroomExtras = {
         unreadCount: computeUnreadCount(
           mergedMessages,
-          room.last_read_message_id ?? null,
+          currentUserLastRead,
           room.read_all ?? room.readAll,
           options?.currentUserId,
         ),
+        title: room.title ?? existing?.title,
+        isGroup: existing?.isGroup,
         updatedAt: mergedMessages.at(-1)?.sentAt ?? existing?.updatedAt,
       };
 
@@ -165,6 +284,11 @@ const toChatParticipant = (
     username: user?.email ?? participant.user_id,
     avatarUrl: "",
     isOnline: false,
+    lastReadMessageId:
+      typeof participant.last_read_message_id === "number" ||
+      typeof participant.last_read_message_id === "string"
+        ? participant.last_read_message_id
+        : null,
   };
 };
 
@@ -231,6 +355,8 @@ const fetchParticipants = async (chatroomId: string): Promise<ChatParticipant[]>
   });
 };
 
+export const getParticipants = fetchParticipants;
+
 export const getMessagesPage = async (
   chatroomId: string,
   page = 1,
@@ -290,7 +416,8 @@ const buildChatroom = (
 
   return {
     id: chatroomId,
-    isGroup: participants.length > 2,
+    title: extras.title,
+    isGroup: extras.isGroup ?? participants.length > 2,
     updatedAt,
     unreadCount: extras.unreadCount ?? 0,
     participants,
