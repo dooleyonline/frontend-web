@@ -6,3 +6,5 @@ export const STORAGE_URL = process.env.NEXT_PUBLIC_STORAGE_URL!;
 //   throw new Error("environment variable NEXT_PUBLIC_STORAGE_URL is required");
 export const GOOGLE_MAPS_STATIC_API_KEY =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY ?? "";
+
+export const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;

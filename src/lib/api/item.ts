@@ -70,7 +70,7 @@ export const create = (item: ItemCreateSchema): ApiQueryOptions<Item> => {
 
 export const uploadImage = (file: File): ApiQueryOptions<string> => {
   const url = `storage/presign`;
-  const params = new URLSearchParams({ type: file.type, bucket: "image" });
+  const params = new URLSearchParams({ type: file.type, bucket: "item" });
 
   return {
     queryKey: [url, params],

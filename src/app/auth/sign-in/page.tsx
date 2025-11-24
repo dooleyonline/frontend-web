@@ -13,27 +13,38 @@ import { LoadingButton } from "@/components/ui/loading-button";
 import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
-import { SignIn, signInSchema } from "@/lib/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
+
+const formSchema = z.object({
+  email: z.email({
+    pattern: new RegExp(/.+@(alumni\.)?emory\.edu/),
+    error: "Email must be a valid Emory email",
+  }),
+  password: z.string().min(1, "Password is required"),
+});
 
 const SignInPage = () => {
   const router = useRouter();
   const { user, revalidate } = useUser();
   const form = useForm({
-    resolver: zodResolver(signInSchema),
+    resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
       password: "",
     },
   });
 
-  const handleSignIn = async (params: SignIn) => {
-    const { error } = await serverQuery(api.auth.signIn(params));
+  const handleSignIn = async () => {
+    const values = form.getValues();
+    const { error } = await serverQuery(
+      api.auth.signIn(values.email, values.password)
+    );
     if (error) {
       toast.error("Failed to sign in", {
         description: "Please try again later",
@@ -81,7 +92,11 @@ const SignInPage = () => {
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input placeholder="********" type="password" {...field} />
+                    <Input
+                      placeholder="Enter your password"
+                      type="password"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

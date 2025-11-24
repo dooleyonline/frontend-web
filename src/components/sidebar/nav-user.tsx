@@ -20,7 +20,7 @@ import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
 import { User } from "@/lib/types";
-import { userFullname, userInitial } from "@/lib/utils";
+import { createImageURL, userFullname, userInitial } from "@/lib/utils";
 import {
   BellIcon,
   LogOutIcon,
@@ -117,7 +117,7 @@ export function NavUser() {
 const UserAvatar = memo((user: User) => {
   return (
     <Avatar className="h-8 w-8 rounded-lg">
-      <AvatarImage src="/images/banner.webp" alt={userFullname(user)} />
+      <AvatarImage src={createImageURL(user.avatar, "user")} alt={userFullname(user)} />
       <AvatarFallback className="rounded-lg">
         {userInitial(user)}
       </AvatarFallback>

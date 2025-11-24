@@ -17,12 +17,18 @@ export const me = (): ApiQueryOptions<User | null> => {
   };
 };
 
-export const signIn = (params: SignIn): ApiQueryOptions<User> => {
+export const signIn = (
+  email: string,
+  password: string
+): ApiQueryOptions<User> => {
   const url = "auth/login";
   return {
     queryKey: [url],
     queryFn: async () => {
-      const res = await apiClient.post(url, params);
+      const res = await apiClient.post(url, {
+        email,
+        password,
+      });
       const { data, error } = await userSchema.safeParseAsync(res.data);
       if (error) throw new Error(error.message);
       return data;
@@ -41,12 +47,22 @@ export const signOut = (): ApiQueryOptions<null> => {
   };
 };
 
-export const signUp = (params: SignUp): ApiQueryOptions<User> => {
+export const signUp = (
+  firstName: string,
+  lastName: string,
+  email: string,
+  password: string
+): ApiQueryOptions<User> => {
   const url = "user";
   return {
     queryKey: [url],
     queryFn: async () => {
-      const res = await apiClient.post(url, params);
+      const res = await apiClient.post(url, {
+        firstName,
+        lastName,
+        email,
+        password,
+      });
       const { data, error } = await userSchema.safeParseAsync(res.data);
       if (error) throw new Error(error.message);
       return data;

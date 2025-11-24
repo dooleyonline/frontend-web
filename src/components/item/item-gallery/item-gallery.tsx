@@ -1,29 +1,19 @@
-"use server";
+"use client";
 
 import { Error } from "@/components/communication";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiQueryOptions, serverQuery } from "@/lib/api/shared";
 import { Item } from "@/lib/types";
-import { Suspense } from "react";
 
 import { ItemCardSkeleton } from "../item-card";
 import { ItemGalleryUI } from "./ui";
 
-type ItemGalleryServerProps = {
-  query: ApiQueryOptions<Item[]>;
+type ItemGalleryProps = {
+  data: Item[] | undefined;
+  isLoading: boolean;
+  error: Error | null;
 };
 
-export const ItemGallery = async ({ query }: ItemGalleryServerProps) => {
-  return (
-    <Suspense fallback={<ItemGallerySkeleton />}>
-      <ItemGalleryData query={query} />
-    </Suspense>
-  );
-};
-
-const ItemGalleryData = async ({ query }: ItemGalleryServerProps) => {
-  const { data, error } = await serverQuery(query);
-
+export const ItemGallery = ({ data, error, isLoading }: ItemGalleryProps) => {
   if (error) {
     return (
       <Error
@@ -33,7 +23,11 @@ const ItemGalleryData = async ({ query }: ItemGalleryServerProps) => {
     );
   }
 
-  return <ItemGalleryUI data={data} />;
+  return isLoading || !data ? (
+    <ItemGallerySkeleton />
+  ) : (
+    <ItemGalleryUI data={data} />
+  );
 };
 
 const ItemGallerySkeleton = () => {

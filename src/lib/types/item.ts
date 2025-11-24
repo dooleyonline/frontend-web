@@ -45,6 +45,7 @@ export const itemSearchParams = z.object({
     .string()
     .transform((data) => parseInt(data))
     .optional(),
+  seller: z.string().optional(),
 });
 
 export type ItemSearchParams = z.infer<typeof itemSearchParams>;
