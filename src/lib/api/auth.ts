@@ -1,5 +1,4 @@
 import { User, userSchema } from "../types";
-import { SignIn, SignUp } from "../types/auth";
 import { ApiQueryOptions, apiClient } from "./shared";
 
 export const me = (): ApiQueryOptions<User | null> => {
