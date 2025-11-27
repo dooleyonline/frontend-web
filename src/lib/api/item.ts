@@ -26,7 +26,7 @@ export const getMany = (params?: ItemSearchParams): ApiQueryOptions<Item[]> => {
 	};
 };
 
-export const get = (id: number): ApiQueryOptions<Item> => {
+export const get = (id: number | string): ApiQueryOptions<Item> => {
 	const url = `item/${id}`;
 	return {
 		queryKey: [url],

@@ -7,6 +7,7 @@ export const userJsonSchema = z.object({
 	first_name: z.string(),
 	last_name: z.string(),
 	avatar: z.string(),
+	verified: z.boolean(),
 });
 
 export const userSchema = userJsonSchema.transform((data) => ({
@@ -15,6 +16,7 @@ export const userSchema = userJsonSchema.transform((data) => ({
 	firstName: data.first_name?.trim() ?? "",
 	lastName: data.last_name?.trim() ?? "",
 	avatar: createImageURL(data.avatar, "user"),
+	verified: data.verified,
 }));
 
 export type User = z.infer<typeof userSchema>;

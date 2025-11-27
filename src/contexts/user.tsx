@@ -2,53 +2,28 @@
 
 import api from "@/lib/api";
 import { User } from "@/lib/types";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  PropsWithChildren,
-  createContext,
-  useCallback,
-  useMemo,
-} from "react";
-
-const authQueryOptions = api.auth.me();
+import { useQuery } from "@tanstack/react-query";
+import { PropsWithChildren, createContext, useCallback } from "react";
 
 type UserContextType = {
-  user: User | null;
-  revalidate: () => Promise<User | null>;
+	user: User | null;
+	revalidate: () => Promise<void>;
 };
 
-export const UserContext = createContext<UserContextType>({
-  user: null,
-  revalidate: async () => null,
-});
+export const UserContext = createContext<UserContextType | null>(null);
 
 export const UserProvider = ({ children }: PropsWithChildren) => {
-  const queryClient = useQueryClient();
-  const { data, error } = useQuery(authQueryOptions);
+	const { data, refetch } = useQuery(api.auth.me());
 
-  const user = error ? null : data ?? null;
+	const revalidate = useCallback(async () => {
+		await refetch();
+	}, []);
 
-  const revalidate = useCallback(async () => {
-    try {
-      const nextUser = await queryClient.fetchQuery(authQueryOptions);
-      return nextUser;
-    } catch {
-      queryClient.setQueryData(authQueryOptions.queryKey, null);
-      return null;
-    }
-  }, [queryClient]);
-
-  const value = useMemo(
-    () => ({
-      user,
-      revalidate,
-    }),
-    [user, revalidate],
-  );
-
-  return (
-    <UserContext.Provider value={value}>
-      {children}
-    </UserContext.Provider>
-  );
+	return (
+		<UserContext.Provider
+			value={{ user: data?.verified ? data : null, revalidate }}
+		>
+			{children}
+		</UserContext.Provider>
+	);
 };
