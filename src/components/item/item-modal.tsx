@@ -24,12 +24,12 @@ import {
 import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { Item } from "@/lib/types";
-import { cn, createImageURL, formatPrice } from "@/lib/utils";
-import getRelativeTime from "@/lib/utils/get-relative-time";
+import { cn, formatPrice } from "@/lib/utils";
 import { savePendingChatMessage } from "@/lib/chat/pending-message";
 
 import { Skeleton } from "../ui/skeleton";
 import { serverQuery } from "@/lib/api/shared";
+import TimeAgo from "react-timeago";
 
 const CHATROOM_ID_PREFIX = "room-";
 const getChatroomSlug = (chatroomId: string) => {
@@ -106,7 +106,6 @@ export const ItemModal = memo((props: ItemModalProps) => {
 
 	if (error) console.error("Error loading item:", error);
 
-	const relativeTime = item?.postedAt ? getRelativeTime(item.postedAt) : "";
 	const isOwnListing =
 		Boolean(item?.seller) && currentUser?.id === item?.seller;
 	const seller = sellerQuery.data ?? null;
@@ -223,7 +222,10 @@ export const ItemModal = memo((props: ItemModalProps) => {
 							{isLoading ? (
 								<Skeleton className="h-6 w-20" />
 							) : (
-								formatPrice(item?.price)
+								new Intl.NumberFormat("en-US", {
+									style: "currency",
+									currency: "USD",
+								}).format(item?.price ?? 0)
 							)}
 						</span>
 
@@ -258,7 +260,7 @@ export const ItemModal = memo((props: ItemModalProps) => {
 									<span className="mr-2 inline-block">{sellerDisplayName}</span>
 								)}
 								<small className="text-muted-foreground">
-									{relativeTime} · {item.views} views
+									<TimeAgo date={item.postedAt} /> · {item.views} views
 								</small>
 							</div>
 						)}

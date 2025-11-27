@@ -38,7 +38,6 @@ import { ArrowUpDown, ChevronDown, MoreHorizontal } from "lucide-react";
 
 import { ItemConditionBadge } from "./item-badge";
 import Image from "next/image";
-import Link from "next/link";
 import { useState } from "react";
 
 export const columns: ColumnDef<Item>[] = [

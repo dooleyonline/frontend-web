@@ -23,24 +23,24 @@ import {
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/ui";
 import type { Item } from "@/lib/types";
-import { formatPrice, getRelativeTime } from "@/lib/utils";
 import { HeartIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { memo } from "react";
+import TimeAgo from "react-timeago";
 
 import { ItemConditionBadge, ItemNegotiableBadge } from "./item-badge";
 import { serverQuery } from "@/lib/api/shared";
 import api from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
+import { intlFormat } from "date-fns";
 
 type ItemCardProps = {
 	item: Item;
 };
 
 const ItemCard = memo(({ item }: ItemCardProps) => {
-	const relativeTime = getRelativeTime(item.postedAt);
 	const link = `/item/${item.id}`;
 	const isMobile = useIsMobile();
 	const router = useRouter();
@@ -90,13 +90,16 @@ const ItemCard = memo(({ item }: ItemCardProps) => {
 				</CardTitle>
 
 				<CardDescription className="font-bold text-foreground mt-0! text-base">
-					{formatPrice(item.price)}
+					{new Intl.NumberFormat("en-US", {
+						style: "currency",
+						currency: "USD",
+					}).format(item.price)}
 				</CardDescription>
 			</CardHeader>
 
 			<CardFooter className="p-0">
 				<small className="text-muted-foreground">
-					{relativeTime} · {item.views} views
+					<TimeAgo date={item.postedAt} /> · {item.views} views
 				</small>
 			</CardFooter>
 		</>
