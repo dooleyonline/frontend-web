@@ -93,7 +93,7 @@ export function SiteNavbar() {
                         href="/profile"
                       >
                         <Avatar>
-                          <AvatarImage src={""} alt="User avatar" />
+                          <AvatarImage src={user.avatar} alt="User avatar" />
                           <AvatarFallback>{userInitial(user)}</AvatarFallback>
                         </Avatar>
                         <div className="mb-1 mt-4 text-lg font-medium">

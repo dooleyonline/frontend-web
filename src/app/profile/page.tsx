@@ -120,9 +120,7 @@ const ProfileAvatar = () => {
 	return (
 		<div className="relative">
 			<Avatar className="size-80 border">
-				<AvatarImage
-					src={user ? createImageURL(user.avatar, "user") : undefined}
-				/>
+				<AvatarImage src={user?.avatar} />
 				<AvatarFallback />
 			</Avatar>
 			<div className="absolute bottom-0 left-1/2 translate-y-1/2 -translate-x-1/2 space-x-1">
