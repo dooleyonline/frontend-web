@@ -8,32 +8,32 @@ import api from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 
 const Home = () => {
-  const forYou = useQuery(api.item.getMany({ page: 1 }));
-  const trending = useQuery(api.item.getMany({ page: 2 }));
+	// const forYou = useQuery(api.item.getMany({ page: 1 }));
+	const trending = useQuery(api.item.getMany({ page: 1 }));
 
-  return (
-    <>
-      <SiteHeader isExpanded />
-      <main>
-        <Section id="categories">
-          <CategoryGallery />
-        </Section>
+	return (
+		<>
+			<SiteHeader isExpanded />
+			<main>
+				<Section id="categories">
+					<CategoryGallery />
+				</Section>
 
-        <Section id="for-you">
-          <SectionHeader
-            title="For You"
-            subtitle="Picked based on your recent search. Updated daily."
-          />
-          <ItemGallery {...forYou} />
-        </Section>
+				{/* <Section id="for-you">
+						<SectionHeader
+							title="For You"
+							subtitle="Picked based on your recent search. Updated daily."
+						/>
+						<ItemGallery {...forYou} />
+					</Section> */}
 
-        <Section id="trending">
-          <SectionHeader title="Trending" subtitle="Discover hot new items" />
-          <ItemGallery {...trending} />
-        </Section>
-      </main>
-    </>
-  );
+				<Section id="trending">
+					<SectionHeader title="Trending" subtitle="Discover hot new items" />
+					<ItemGallery {...trending} />
+				</Section>
+			</main>
+		</>
+	);
 };
 
 export default Home;
