@@ -24,7 +24,7 @@ import {
 import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { Item } from "@/lib/types";
-import { cn, formatPrice } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { savePendingChatMessage } from "@/lib/chat/pending-message";
 
 import { Skeleton } from "../ui/skeleton";

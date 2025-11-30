@@ -9,7 +9,7 @@ import { serverQuery } from "@/lib/api/shared";
 import { ItemCreateSchema } from "@/lib/types";
 import { redirect, useRouter } from "next/navigation";
 import { MouseEventHandler, useEffect, useState } from "react";
-import { useForm, useFormState } from "react-hook-form";
+import { useForm, useFormState, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Step1 } from "./(form)/step-1";
@@ -36,6 +36,10 @@ const MarketplaceNew = () => {
       isNegotiable: false,
     },
     mode: "onChange",
+  });
+
+  const watchedValues = useWatch({
+    control: form.control,
   });
 
   const { isDirty } = useFormState({ control: form.control });
@@ -137,7 +141,7 @@ const MarketplaceNew = () => {
         <ItemModal
           item={{
             id: -1,
-            ...form.watch(),
+            ...watchedValues,
             postedAt: new Date(),
             soldAt: null,
             placeholder: null,

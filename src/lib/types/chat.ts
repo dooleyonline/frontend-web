@@ -62,6 +62,7 @@ const chatRoomJsonSchema = z.object({
   unreadCount: z.number().int().nonnegative(),
   participants: z.array(z.union([z.string(), chatParticipantSchema])),
   messages: z.array(chatMessageJsonSchema),
+  readAll: z.boolean().optional(),
 });
 
 export const chatRoomSchema = chatRoomJsonSchema.transform((data) => {
@@ -89,7 +90,8 @@ export const chatRoomSchema = chatRoomJsonSchema.transform((data) => {
 
   return {
     id: data.id,
-    isGroup: participants.length > 2,
+    readAll: data.readAll,
+    isGroup: false,
     updatedAt: new Date(data.updatedAt),
     unreadCount: data.unreadCount,
     participants,

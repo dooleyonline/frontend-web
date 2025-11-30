@@ -38,6 +38,9 @@ type MessagePaneProps = {
   currentUserId: string;
   sending: boolean;
   onSendMessage: (body: string) => Promise<boolean>;
+  onLoadMore?: () => Promise<void> | void;
+  loadingMore?: boolean;
+  hasMore?: boolean;
   onBack?: () => void;
   onOpenMap?: (chatroom: Chatroom) => void;
   onLeaveChatroom?: (chatroomId: string) => Promise<void> | void;
@@ -50,6 +53,9 @@ export const MessagePane = ({
   currentUserId,
   sending,
   onSendMessage,
+  onLoadMore,
+  loadingMore = false,
+  hasMore = false,
   onBack,
   onOpenMap,
   onLeaveChatroom,
@@ -58,6 +64,12 @@ export const MessagePane = ({
 }: MessagePaneProps) => {
   const [draftsByChatroom, setDraftsByChatroom] = useState<Record<string, string>>({});
   const viewportRef = useRef<HTMLDivElement>(null);
+  const previousScrollHeightRef = useRef(0);
+  const previousScrollTopRef = useRef(0);
+  const pendingLoadRef = useRef(false);
+  const nearBottomRef = useRef(true);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const lastChatroomIdRef = useRef<string | null>(null);
   const currentChatroomId = chatroom?.id ?? null;
   const draft =
     currentChatroomId && draftsByChatroom[currentChatroomId] !== undefined
@@ -130,8 +142,53 @@ export const MessagePane = ({
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [sortedMessages.length, chatroom?.id]);
+
+    // If we're prepending older messages, wait until loadingMore flips false,
+    // then restore the relative scroll position without jumping to bottom.
+    if (pendingLoadRef.current) {
+      if (!loadingMore) {
+        const delta = el.scrollHeight - previousScrollHeightRef.current;
+        el.scrollTop = previousScrollTopRef.current + delta;
+        pendingLoadRef.current = false;
+      }
+      return;
+    }
+
+    const chatroomChanged = lastChatroomIdRef.current !== chatroom?.id;
+    if (chatroomChanged) {
+      nearBottomRef.current = true;
+    }
+
+    const lastMessage = sortedMessages.at(-1);
+    const lastMessageId = lastMessage?.id ?? null;
+    const hasNewMessage = lastMessageId && lastMessageId !== lastMessageIdRef.current;
+    const lastMessageFromSelf =
+      hasNewMessage && lastMessage?.senderId === currentUserId;
+
+    // Stay pinned to bottom when switching rooms, when the user is near bottom, or when
+    // the latest message is our own.
+    if (chatroomChanged || nearBottomRef.current || lastMessageFromSelf) {
+      el.scrollTop = el.scrollHeight;
+    }
+
+    lastChatroomIdRef.current = chatroom?.id ?? null;
+    lastMessageIdRef.current = lastMessageId;
+  }, [sortedMessages.length, chatroom?.id, loadingMore, currentUserId, sortedMessages]);
+
+  const handleScroll = () => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.clientHeight - el.scrollTop;
+    nearBottomRef.current = distanceFromBottom < 120;
+
+    if (!onLoadMore || !hasMore || loadingMore || pendingLoadRef.current) return;
+    if (el.scrollTop <= 40) {
+      previousScrollHeightRef.current = el.scrollHeight;
+      previousScrollTopRef.current = el.scrollTop;
+      pendingLoadRef.current = true;
+      void onLoadMore();
+    }
+  };
 
   const handleOpenMap = () => {
     if (chatroom && onOpenMap) {
@@ -253,8 +310,27 @@ export const MessagePane = ({
 
       <div
         ref={viewportRef}
-        className="flex-1 min-h-0 max-h-[calc(100vh-280px)] space-y-4 overflow-y-auto px-3 py-5"
+        className="flex-1 min-h-0 max-h-[calc(80vh-0px)] space-y-4 overflow-y-auto px-3 py-5"
+        onScroll={handleScroll}
       >
+        {hasMore ? (
+          <div className="flex justify-center">
+            {loadingMore ? (
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Loading earlier messages...
+              </span>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-[11px] uppercase"
+                onClick={onLoadMore}
+              >
+                Load earlier messages
+              </Button>
+            )}
+          </div>
+        ) : null}
         <SystemNotice message="Avoid meeting in places without an emergency (the blue) tower." />
         {sortedMessages.map((message, index) => {
           const previous = sortedMessages[index - 1];

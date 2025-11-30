@@ -20,7 +20,7 @@ import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
 import { User } from "@/lib/types";
-import { createImageURL, userFullname, userInitial } from "@/lib/utils";
+import { userFullname, userInitial } from "@/lib/utils";
 import {
 	BellIcon,
 	LogOutIcon,

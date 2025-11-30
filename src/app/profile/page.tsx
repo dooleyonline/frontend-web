@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
-import { createImageURL, userFullname } from "@/lib/utils";
+import { userFullname } from "@/lib/utils";
 import {
 	keepPreviousData,
 	useInfiniteQuery,

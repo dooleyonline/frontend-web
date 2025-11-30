@@ -40,16 +40,11 @@ const getSenderName = (
   currentUserId: string,
 ) => {
   if (senderId === currentUserId) return "You";
-  return (
-    chatroom.participants.find((participant) => participant.id === senderId)
-      ?.displayName ?? "Unknown"
-  );
+  const other = chatroom.participants.find((p) => p.id === senderId);
+  return other?.displayName || other?.username || "Contact";
 };
 
 const getAvatarUrl = (chatroom: Chatroom, currentUserId: string) => {
-  if (chatroom.isGroup) {
-    return chatroom.participants.find((p) => p.id !== currentUserId)?.avatarUrl;
-  }
   return chatroom.participants.find((p) => p.id !== currentUserId)?.avatarUrl;
 };
 
@@ -81,10 +76,9 @@ export const ChatroomList = (props: ChatroomListProps) => {
     return chatrooms.filter((chatroom) => {
       const title = normalize(buildChatroomTitle(chatroom, currentUserId));
       if (title.includes(regex)) return true;
-
-      return chatroom.participants
-        .map((participant) => normalize(participant.displayName))
-        .some((name) => name.includes(regex));
+      return chatroom.participants.some((p) =>
+        normalize(p.displayName || p.username || p.id).includes(regex),
+      );
     });
   }, [chatrooms, search, currentUserId]);
 
@@ -160,9 +154,7 @@ export const ChatroomList = (props: ChatroomListProps) => {
               const title = buildChatroomTitle(chatroom, currentUserId);
               const avatarUrl = getAvatarUrl(chatroom, currentUserId);
               const preview = lastMessage
-                ? `${getSenderName(chatroom, lastMessage.senderId, currentUserId)}: ${
-                    lastMessage.body
-                  }`
+                ? `${getSenderName(chatroom, lastMessage.senderId, currentUserId)}: ${lastMessage.body}`
                 : "No messages yet";
               const timeLabel = lastMessage
                 ? formatDistanceToNow(lastMessage.sentAt, { addSuffix: false })
