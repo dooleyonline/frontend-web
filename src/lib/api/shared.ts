@@ -11,6 +11,8 @@ export type ApiQueryOptions<T> = {
   queryKey: QueryKey;
   queryFn: QueryFunction<T>;
   gcTime?: number;
+  staleTime?: number;
+  refetchOnWindowFocus?: boolean;
 };
 
 export const apiClient = axios.create({
