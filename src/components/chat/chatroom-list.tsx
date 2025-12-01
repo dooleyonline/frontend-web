@@ -27,6 +27,7 @@ type ChatroomListProps = {
   onSelect: (chatroomId: string) => void;
   onStartNewChat?: () => void;
   disableNewChat?: boolean;
+  showEmptyState?: boolean;
 };
 
 const normalize = (value: string) => value.toLowerCase().trim();
@@ -67,6 +68,7 @@ export const ChatroomList = (props: ChatroomListProps) => {
     onRetry,
     onStartNewChat,
     disableNewChat,
+    showEmptyState = true,
   } = props;
   const [search, setSearch] = useState("");
 
@@ -142,7 +144,7 @@ export const ChatroomList = (props: ChatroomListProps) => {
             </div>
           )}
 
-          {!isLoading && !isError && filteredChatrooms.length === 0 ? (
+          {!isLoading && !isError && filteredChatrooms.length === 0 && showEmptyState ? (
             <div className="px-5 py-8 text-center text-sm text-muted-foreground">
               {chatrooms.length === 0
                 ? "No conversations yet. Start a new chat to see messages here."

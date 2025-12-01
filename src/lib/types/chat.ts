@@ -19,7 +19,7 @@ export const chatParticipantSchema = z.object({
 export type ChatParticipant = z.infer<typeof chatParticipantSchema>;
 
 const chatMessageJsonSchema = z.object({
-  id: z.union([z.string(), z.number()]),
+  id: z.union([z.string(), z.number()]).optional(),
   room_id: z.string(),
   sent_by: z.string(),
   body: z.string(),
@@ -28,7 +28,18 @@ const chatMessageJsonSchema = z.object({
 });
 
 export const chatMessageSchema = chatMessageJsonSchema.transform((data) => {
-  const id = typeof data.id === "number" ? data.id.toString() : data.id;
+  const fallbackID = `ws-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const rawID =
+    data.id === undefined || data.id === null
+      ? fallbackID
+      : typeof data.id === "number"
+      ? data.id <= 0
+        ? fallbackID
+        : data.id.toString()
+      : data.id.trim().length > 0
+      ? data.id
+      : fallbackID;
+  const id = rawID;
   const chatroomId = data.room_id;
   const senderId = data.sent_by;
   const rawSentAt = data.sent_at;

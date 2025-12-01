@@ -104,6 +104,14 @@ export type ChatroomParticipantInput = {
   userId: string;
 };
 
+const buildParticipantStub = (id: string): ChatParticipant => ({
+  id,
+  displayName: id,
+  username: id,
+  avatarUrl: "",
+  isOnline: false,
+});
+
 const toChatParticipant = (
   participant: ParticipantResponse,
 ): ChatParticipant => {
@@ -131,6 +139,10 @@ const parseSummaryParticipants = (
   payload: unknown,
 ): ChatParticipant[] | undefined => {
   if (!payload) return undefined;
+
+  if (Array.isArray(payload) && payload.every((entry) => typeof entry === "string")) {
+    return (payload as string[]).map(buildParticipantStub);
+  }
 
   try {
     return z.array(chatParticipantSchema).parse(payload);
@@ -249,59 +261,101 @@ const coerceDate = (value?: string | Date): Date | undefined => {
 
 export const CHAT_MESSAGES_PAGE_SIZE = 10;
 
-export const fetchParticipants = async (chatroomId: string): Promise<ChatParticipant[]> => {
-  const response = await apiClient.get(`chat/${chatroomId}/participants`);
-  const payload = participantsResponseSchema.parse(response.data);
-  const idsNeedingHydration = Array.from(
-    new Set(
-      payload
-        .filter((participant) => {
-          const user = participant.user;
-          const hasName =
-            !!user &&
-            ((typeof user.first_name === "string" && user.first_name.trim().length > 0) ||
-              (typeof user.last_name === "string" && user.last_name.trim().length > 0));
-          return !hasName;
-        })
-        .map((participant) => participant.user_id),
-    ),
-  );
+const hydrateUsersByID = async (ids: string[]): Promise<Map<string, User>> => {
+  const lookup = new Map<string, User>();
+  if (ids.length === 0) return lookup;
 
-  const hydratedUsers = await Promise.all(
-    idsNeedingHydration.map(async (userId) => {
+  const results = await Promise.all(
+    ids.map(async (userId) => {
       try {
         const res = await apiClient.get(`user/${userId}`);
         const user = userSchema.parse(res.data);
-        return user;
+        return { userId, user };
       } catch {
         return null;
       }
     }),
   );
 
-  const userLookup = new Map<string, User>();
-  hydratedUsers.forEach((user, index) => {
-    if (user) {
-      userLookup.set(idsNeedingHydration[index]!, user);
+  results.forEach((result) => {
+    if (result?.user) {
+      lookup.set(result.userId, result.user);
     }
   });
 
-  return payload.map((participant) => {
-    const fetchedUser = userLookup.get(participant.user_id);
-    const enrichedUser = fetchedUser
-      ? {
-          id: fetchedUser.id,
-          email: fetchedUser.email,
-          first_name: fetchedUser.firstName,
-          last_name: fetchedUser.lastName,
-        }
-      : participant.user;
+  return lookup;
+};
 
-    return toChatParticipant({
-      ...participant,
-      user: enrichedUser,
+const toChatParticipantFromUser = (userId: string, user?: User): ChatParticipant => {
+  if (!user) return buildParticipantStub(userId);
+
+  const nameParts = [user.firstName?.trim() ?? "", user.lastName?.trim() ?? ""].filter(
+    Boolean,
+  );
+  const displayName =
+    nameParts.length > 0
+      ? nameParts.join(" ")
+      : user.email?.trim().length
+      ? user.email
+      : userId;
+
+  return {
+    id: userId,
+    displayName,
+    username: user.email ?? userId,
+    avatarUrl: "",
+    isOnline: false,
+  };
+};
+
+export const fetchParticipants = async (
+  chatroomId: string,
+  participantIds?: string[],
+): Promise<ChatParticipant[]> => {
+  const ids = Array.from(new Set((participantIds ?? []).filter(Boolean)));
+
+  try {
+    const response = await apiClient.get(`chat/${chatroomId}/participants`);
+    const payload = participantsResponseSchema.parse(response.data);
+    const idsNeedingHydration = Array.from(
+      new Set(
+        payload
+          .filter((participant) => {
+            const user = participant.user;
+            const hasName =
+              !!user &&
+              ((typeof user.first_name === "string" && user.first_name.trim().length > 0) ||
+                (typeof user.last_name === "string" && user.last_name.trim().length > 0));
+            return !hasName;
+          })
+          .map((participant) => participant.user_id),
+      ),
+    );
+
+    const hydratedUsers = await hydrateUsersByID(idsNeedingHydration);
+
+    return payload.map((participant) => {
+      const fetchedUser = hydratedUsers.get(participant.user_id);
+      const enrichedUser = fetchedUser
+        ? {
+            id: fetchedUser.id,
+            email: fetchedUser.email,
+            first_name: fetchedUser.firstName,
+            last_name: fetchedUser.lastName,
+          }
+        : participant.user;
+
+      return toChatParticipant({
+        ...participant,
+        user: enrichedUser,
+      });
     });
-  });
+  } catch {
+    if (ids.length === 0) return [];
+
+    const hydratedUsers = await hydrateUsersByID(ids);
+    return ids.map((userId) => toChatParticipantFromUser(userId, hydratedUsers.get(userId)));
+  }
 };
 
 export const fetchMessagesPage = async (
@@ -357,8 +411,9 @@ const fetchChatroom = async (
   chatroomId: string,
   extras: ChatroomExtras = {},
 ): Promise<Chatroom> => {
+  const participantIds = extras.participants ? extras.participants.map((p) => p.id) : [];
   const participants =
-    extras.participants ?? (await fetchParticipants(chatroomId));
+    extras.participants ?? (await fetchParticipants(chatroomId, participantIds));
   const messages =
     extras.messages ?? (await fetchMessagesPage(chatroomId, 1));
 

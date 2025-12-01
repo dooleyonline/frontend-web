@@ -21,7 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import { API_BASE_URL } from "@/lib/env";
-import { ChatMessage, Chatroom, chatMessageSchema } from "@/lib/types";
+import { ChatMessage, ChatParticipant, Chatroom, chatMessageSchema } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   clearPendingChatMessage,
@@ -37,6 +37,35 @@ const CHATROOMS_QUERY_KEY = ["chat", "chatrooms"] as const;
 const ACCESS_DENIED_MESSAGE = "You do not have access to this conversation.";
 const CHATROOM_NOT_FOUND_MESSAGE = "Conversation not found.";
 const CHATROOM_ID_PREFIX = "room-";
+const participantNeedsHydration = (participant: ChatParticipant) => {
+  const display = participant.displayName?.trim() ?? "";
+  const username = participant.username?.trim() ?? "";
+  return !display || display === participant.id || display === username;
+};
+const isDuplicateMessage = (messages: ChatMessage[], candidate: ChatMessage) =>
+  messages.some((message) => {
+    if (message.id === candidate.id) return true;
+    if (message.senderId !== candidate.senderId) return false;
+    if (message.body !== candidate.body) return false;
+    const delta = Math.abs(message.sentAt.getTime() - candidate.sentAt.getTime());
+    return delta <= 2000;
+  });
+const mergeMessages = (existing: ChatMessage[], incoming: ChatMessage[]) => {
+  const merged = [...existing];
+  incoming.forEach((message) => {
+    if (!isDuplicateMessage(merged, message)) {
+      merged.push(message);
+    }
+  });
+  return merged.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+};
+const buildParticipantStub = (id: string): ChatParticipant => ({
+  id,
+  displayName: id,
+  username: id,
+  avatarUrl: "",
+  isOnline: false,
+});
 
 const removeTrailingSlash = (value: string) =>
   value.endsWith("/") ? value.slice(0, -1) : value;
@@ -46,7 +75,14 @@ const ensureWebSocketBaseUrl = () => {
     throw new Error("NEXT_PUBLIC_API_BASE_URL must be defined for chat WebSocket connection.");
   }
 
-  return removeTrailingSlash(API_BASE_URL);
+  const trimmed = removeTrailingSlash(API_BASE_URL);
+  if (trimmed.startsWith("https://")) {
+    return `wss://${trimmed.slice("https://".length)}`;
+  }
+  if (trimmed.startsWith("http://")) {
+    return `ws://${trimmed.slice("http://".length)}`;
+  }
+  return trimmed;
 };
 
 const WS_BASE_URL = ensureWebSocketBaseUrl();
@@ -82,6 +118,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   const [paginationByRoom, setPaginationByRoom] = useState<
     Record<string, { page: number; loading: boolean; exhausted: boolean; initialized: boolean }>
   >({});
+  const [chatroomListReady, setChatroomListReady] = useState(false);
   const participantsFetchInFlightRef = useRef<Set<string>>(new Set());
   const queryClient = useQueryClient();
   const invalidAccessToastShownRef = useRef(false);
@@ -101,12 +138,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
         const prior = existingMap.get(room.id);
         if (!prior) return room;
 
-        const messageMap = new Map<string, ChatMessage>();
-        prior.messages.forEach((m) => messageMap.set(m.id, m));
-        room.messages.forEach((m) => messageMap.set(m.id, m));
-        const messages = Array.from(messageMap.values()).sort(
-          (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
-        );
+        const messages = mergeMessages(prior.messages, room.messages);
 
         return {
           ...room,
@@ -185,6 +217,17 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     [chatroomListQuery.data],
   );
   useEffect(() => {
+    if (chatrooms.length > 0) {
+      setChatroomListReady(true);
+    }
+  }, [chatrooms.length]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (chatroomListQuery.isLoading || chatroomListQuery.isFetching) return;
+    const timer = window.setTimeout(() => setChatroomListReady(true), 2000);
+    return () => window.clearTimeout(timer);
+  }, [chatroomListQuery.isLoading, chatroomListQuery.isFetching]);
+  useEffect(() => {
     setPaginationByRoom((previous) => {
       const next = { ...previous };
       chatrooms.forEach((room) => {
@@ -201,6 +244,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   }, [chatrooms]);
   const chatroomListFetched = Boolean(currentUserId && chatroomListQuery.data);
   const chatroomListFetching = chatroomListQuery.isLoading || chatroomListQuery.isFetching;
+  const chatroomListLoading = !chatroomListReady;
 
   const upsertChatroom = useCallback(
     (incoming: Chatroom) => {
@@ -220,14 +264,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
 
           const existing = previous[index];
 
-          const existingIds = new Set(existing.messages.map((message) => message.id));
-          const mergedMessages = [...existing.messages];
-          incoming.messages.forEach((message) => {
-            if (!existingIds.has(message.id)) {
-              mergedMessages.push(message);
-            }
-          });
-          mergedMessages.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+          const mergedMessages = mergeMessages(existing.messages, incoming.messages);
 
           const nextRoom: Chatroom = {
             ...existing,
@@ -249,10 +286,10 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   );
 
   const hydrateChatroom = useCallback(
-    async (chatroomId: string): Promise<Chatroom | null> => {
+    async (chatroomId: string, participantIds: string[] = []): Promise<Chatroom | null> => {
       try {
         const [participants, messages] = await Promise.all([
-          fetchParticipants(chatroomId),
+          fetchParticipants(chatroomId, participantIds),
           fetchMessagesPage(chatroomId, 1),
         ]);
         const latestMessageAt = messages.at(-1)?.sentAt ?? new Date();
@@ -300,13 +337,19 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
       if (!chatroomId) return;
       const rooms = queryClient.getQueryData<Chatroom[] | undefined>(CHATROOMS_QUERY_KEY);
       const target = rooms?.find((room) => room.id === chatroomId);
-      if (target && target.participants.length > 0) return;
+      const needsHydration =
+        !target ||
+        target.participants.length === 0 ||
+        target.participants.some(participantNeedsHydration);
+      if (!needsHydration) return;
+      const knownParticipantIds =
+        target?.participants?.map((participant) => participant.id).filter(Boolean) ?? [];
 
       if (participantsFetchInFlightRef.current.has(chatroomId)) return;
 
       participantsFetchInFlightRef.current.add(chatroomId);
       try {
-        const participants = await api.chat.fetchParticipants(chatroomId);
+        const participants = await api.chat.fetchParticipants(chatroomId, knownParticipantIds);
         queryClient.setQueryData<Chatroom[] | undefined>(
           CHATROOMS_QUERY_KEY,
           (previous) => {
@@ -329,8 +372,12 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   useEffect(() => {
     if (!currentUserId) return;
     chatrooms.forEach((room) => {
-      if (room.participants.length > 0) return;
-      void ensureRoomParticipants(room.id);
+      const needsParticipants =
+        room.participants.length === 0 ||
+        room.participants.some(participantNeedsHydration);
+      if (needsParticipants) {
+        void ensureRoomParticipants(room.id);
+      }
     });
   }, [chatrooms, currentUserId, ensureRoomParticipants]);
 
@@ -443,11 +490,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
             const index = previous.findIndex((room) => room.id === chatroomId);
             if (index === -1) return previous;
             const target = previous[index];
-            const existingIds = new Set(target.messages.map((m) => m.id));
-            const mergedMessages = [
-              ...messages.filter((m) => !existingIds.has(m.id)),
-              ...target.messages,
-            ].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+            const mergedMessages = mergeMessages(target.messages, messages);
 
             const updated: Chatroom = {
               ...target,
@@ -582,7 +625,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
       }
 
       const target = previous[index];
-      if (target.messages.some((message) => message.id === parsed.id)) {
+      if (isDuplicateMessage(target.messages, parsed)) {
         return previous;
       }
 
@@ -681,9 +724,11 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
         const newChatroomId = await createChatroomAsync({
           participantIds: uniqueParticipantIds,
         });
-        const hydrated = await hydrateChatroom(newChatroomId);
+        const participantStubs = uniqueParticipantIds.map(buildParticipantStub);
+        const hydrated = await hydrateChatroom(newChatroomId, uniqueParticipantIds);
         if (hydrated) {
-          upsertChatroom(hydrated);
+          const filled = hydrated.participants.length > 0 ? hydrated.participants : participantStubs;
+          upsertChatroom({ ...hydrated, participants: filled });
         } else {
           upsertChatroom({
             id: newChatroomId,
@@ -691,7 +736,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
             isGroup: uniqueParticipantIds.length > 2,
             updatedAt: new Date(),
             unreadCount: 0,
-            participants: [],
+            participants: participantStubs,
             messages: [],
           });
           void ensureRoomParticipants(newChatroomId);
@@ -841,11 +886,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
         if (index === -1) return previous;
         const target = previous[index];
 
-        const existingIds = new Set(target.messages.map((m) => m.id));
-        const mergedMessages = [
-          ...olderMessages.filter((m) => !existingIds.has(m.id)),
-          ...target.messages,
-        ].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+        const mergedMessages = mergeMessages(target.messages, olderMessages);
 
         const updated: Chatroom = {
           ...target,
@@ -1098,11 +1139,12 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
               activeChatroomId={activeChatroomId}
               currentUserId={currentUserId}
               onSelect={handleChatroomSelect}
-              isLoading={chatroomListQuery.isLoading}
+              isLoading={chatroomListLoading}
               isError={chatroomListQuery.isError}
               onRetry={() => chatroomListQuery.refetch()}
               onStartNewChat={() => setIsCreateDialogOpen(true)}
               disableNewChat={isCreatingChatroom}
+              showEmptyState={chatroomListReady}
             />
           </div>
 
