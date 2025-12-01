@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
-import { createImageURL, userFullname } from "@/lib/utils";
+import { userFullname } from "@/lib/utils";
 import {
 	keepPreviousData,
 	useInfiniteQuery,
@@ -40,11 +40,7 @@ const ProfilePage = () => {
 			return allPages.length + 1;
 		},
 	});
-	const { data: likedIDsData } = useQuery(api.user.getLiked());
-	const { data: likedItemsData } = useQuery({
-		...api.item.getBatch(likedIDsData ?? []),
-		enabled: !!likedIDsData,
-	});
+	const { data: likedData } = useQuery(api.user.getLiked());
 
 	useEffect(() => {
 		if (myItems.hasNextPage) {
@@ -74,7 +70,7 @@ const ProfilePage = () => {
 
 			<Section id="liked-items">
 				<SectionHeader title="Liked Items" />
-				{likedItemsData && <ItemTable data={likedItemsData} />}
+				{likedData && <ItemTable data={likedData} />}
 			</Section>
 		</main>
 	);

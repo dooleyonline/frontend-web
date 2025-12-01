@@ -1,4 +1,4 @@
-﻿import { Item, User, presignSchema, userSchema } from "@/lib/types";
+﻿import { Item, User, itemSchema, presignSchema, userSchema } from "@/lib/types";
 import axios from "axios";
 import { z } from "zod";
 
@@ -73,24 +73,18 @@ export const updateAvatar = (user: User, img: File): ApiQueryOptions<null> => {
 	};
 };
 
-export const getLiked = (): ApiQueryOptions<number[]> => {
+export const getLiked = (): ApiQueryOptions<Item[]> => {
 	const url = `user/liked`;
 	return {
 		queryKey: [url],
 		queryFn: async () => {
 			const res = await apiClient.get(url);
 			const { data, error } = await z
-				.array(
-					z.object({
-						user_id: z.string(),
-						item_id: z.number(),
-						created_at: z.string(),
-					}),
-				)
+				.array(itemSchema)
 				.safeParseAsync(res.data);
 			if (error) throw new Error(error.message);
 
-			return data.map((d) => d.item_id);
+			return data;
 		},
 	};
 };

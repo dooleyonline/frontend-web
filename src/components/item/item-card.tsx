@@ -34,7 +34,6 @@ import { ItemConditionBadge, ItemNegotiableBadge } from "./item-badge";
 import { serverQuery } from "@/lib/api/shared";
 import api from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { intlFormat } from "date-fns";
 
 type ItemCardProps = {
 	item: Item;
@@ -47,7 +46,8 @@ const ItemCard = memo(({ item }: ItemCardProps) => {
 	const { data: likedData, refetch: likedRefetch } = useQuery(
 		api.user.getLiked(),
 	);
-	const isLiked = likedData?.includes(item.id) ?? false;
+	const isLiked =
+		likedData && item ? likedData.some((d) => d.id === item.id) : false;
 
 	const handleNavigate = (e: { preventDefault: () => void }) => {
 		e.preventDefault();
