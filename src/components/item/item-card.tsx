@@ -46,7 +46,8 @@ const ItemCard = memo(({ item }: ItemCardProps) => {
 	const { data: likedData, refetch: likedRefetch } = useQuery(
 		api.user.getLiked(),
 	);
-	const isLiked = likedData?.includes(item.id) ?? false;
+	const isLiked =
+		likedData && item ? likedData.some((d) => d.id === item.id) : false;
 
 	const handleNavigate = (e: { preventDefault: () => void }) => {
 		e.preventDefault();
