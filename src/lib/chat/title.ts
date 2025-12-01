@@ -1,11 +1,13 @@
 import { Chatroom } from "@/lib/types";
 
-const MAX_GROUP_TITLE_LENGTH = 48;
-
-const truncate = (value: string, maxLength: number) => {
-  if (value.length <= maxLength) return value;
-  const sliceLength = Math.max(maxLength - 3, 0);
-  return `${value.slice(0, sliceLength).trimEnd().replace(/[, ]+$/, "")}...`;
+const isLikelyID = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  const uuidRegex =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  if (uuidRegex.test(trimmed)) return true;
+  if (trimmed.length > 18 && !trimmed.includes(" ")) return true;
+  return false;
 };
 
 const buildParticipantNames = (
@@ -14,22 +16,24 @@ const buildParticipantNames = (
 ): string[] =>
   chatroom.participants
     .filter((participant) => participant.id !== currentUserId)
-    .map((participant) => participant.displayName || participant.username || "Unknown");
+    .map((participant) => participant.displayName || participant.username || "Unknown")
+    .map((name, index) => {
+      const participant = chatroom.participants.filter((p) => p.id !== currentUserId)[index];
+      if (participant && isLikelyID(name)) {
+        const candidate = participant.username || "";
+        if (candidate && !isLikelyID(candidate)) return candidate;
+        return "";
+      }
+      return name;
+    })
+    .filter((name) => name.trim().length > 0);
 
 export const buildChatroomTitle = (
   chatroom: Chatroom,
   currentUserId: string,
 ): string => {
+  // 1:1 chat: always use the other participant's name
   const otherNames = buildParticipantNames(chatroom, currentUserId);
-
-  if (!chatroom.isGroup) {
-    return otherNames[0] ?? "Conversation";
-  }
-
-  if (otherNames.length === 0) {
-    return "Group chat";
-  }
-
-  const joinedNames = otherNames.join(", ");
-  return truncate(joinedNames, MAX_GROUP_TITLE_LENGTH);
+  if (otherNames[0]) return otherNames[0];
+  return "Conversation";
 };

@@ -4,10 +4,8 @@ import {
   ChatMessage,
   ChatParticipant,
   Chatroom,
-  SendMessageInput,
   chatMessageSchema,
   chatParticipantSchema,
-  sendMessageInputSchema,
   userSchema,
   User,
 } from "@/lib/types";
@@ -26,11 +24,13 @@ const participantResponseSchema = z
     room_id: z.string(),
     user_id: z.string(),
     last_read_message_id: z
-      .object({
-        int64: z.union([z.number(), z.string()]).optional(),
-        valid: z.boolean(),
-      })
-      .or(z.null())
+      .union([
+        z.union([z.number(), z.string()]).nullable(),
+        z.object({
+          int64: z.union([z.number(), z.string()]).optional(),
+          valid: z.boolean(),
+        }),
+      ])
       .optional(),
     user: z
       .object({
@@ -69,6 +69,8 @@ const chatRoomSummarySchema = z
     updated_at: z.string().optional(),
     unreadCount: z.number().int().nonnegative().optional(),
     unread_count: z.number().int().nonnegative().optional(),
+    last_message: z.unknown().optional(),
+    read_all: z.boolean().optional(),
     participants: z.unknown().optional(),
     messages: z.unknown().optional(),
   })
@@ -78,6 +80,8 @@ type RestChatroomSummary = {
   id: string;
   updatedAt?: string;
   unreadCount?: number;
+  readAll?: boolean;
+  lastMessage?: ChatMessage;
   participants?: ChatParticipant[];
   messages?: ChatMessage[];
 };
@@ -85,6 +89,8 @@ type RestChatroomSummary = {
 type ChatroomExtras = {
   updatedAt?: string | Date;
   unreadCount?: number;
+  readAll?: boolean;
+  lastMessage?: ChatMessage;
   participants?: ChatParticipant[];
   messages?: ChatMessage[];
 };
@@ -98,11 +104,13 @@ export type ChatroomParticipantInput = {
   userId: string;
 };
 
-export type UpdateMessageInput = {
-  chatroomId: string;
-  messageId: number | string;
-  body: string;
-};
+const buildParticipantStub = (id: string): ChatParticipant => ({
+  id,
+  displayName: id,
+  username: id,
+  avatarUrl: "",
+  isOnline: false,
+});
 
 const toChatParticipant = (
   participant: ParticipantResponse,
@@ -132,6 +140,10 @@ const parseSummaryParticipants = (
 ): ChatParticipant[] | undefined => {
   if (!payload) return undefined;
 
+  if (Array.isArray(payload) && payload.every((entry) => typeof entry === "string")) {
+    return (payload as string[]).map(buildParticipantStub);
+  }
+
   try {
     return z.array(chatParticipantSchema).parse(payload);
   } catch {
@@ -146,6 +158,15 @@ const parseSummaryParticipants = (
 
 const parseSummaryMessages = (payload: unknown): ChatMessage[] | undefined => {
   if (!payload) return undefined;
+
+  if (!Array.isArray(payload) && payload && typeof payload === "object") {
+    try {
+      const single = chatMessageSchema.parse(payload);
+      return [single];
+    } catch {
+      // fallthrough
+    }
+  }
 
   if (Array.isArray(payload)) {
     try {
@@ -214,12 +235,19 @@ const normalizeChatroomSummary = (item: unknown): RestChatroomSummary => {
     throw new Error("Chatroom summary is missing an id field.");
   }
 
+  const messages = parseSummaryMessages(parsed.messages);
+  const lastMessage =
+    parseSummaryMessages(parsed.last_message)?.[0] ??
+    messages?.[messages.length - 1];
+
   return {
     id,
     updatedAt: parsed.updatedAt ?? parsed.updated_at,
     unreadCount: parsed.unreadCount ?? parsed.unread_count,
     participants: parseSummaryParticipants(parsed.participants),
-    messages: parseSummaryMessages(parsed.messages),
+    messages,
+    lastMessage,
+    readAll: parsed.read_all,
   };
 };
 
@@ -231,68 +259,115 @@ const coerceDate = (value?: string | Date): Date | undefined => {
   return new Date(timestamp);
 };
 
-const fetchParticipants = async (chatroomId: string): Promise<ChatParticipant[]> => {
-  const response = await apiClient.get(`chat/${chatroomId}/participants`);
-  const payload = participantsResponseSchema.parse(response.data);
-  const idsNeedingHydration = Array.from(
-    new Set(
-      payload
-        .filter((participant) => {
-          const user = participant.user;
-          const hasName =
-            !!user &&
-            ((typeof user.first_name === "string" && user.first_name.trim().length > 0) ||
-              (typeof user.last_name === "string" && user.last_name.trim().length > 0));
-          return !hasName;
-        })
-        .map((participant) => participant.user_id),
-    ),
-  );
+export const CHAT_MESSAGES_PAGE_SIZE = 10;
 
-  const hydratedUsers = await Promise.all(
-    idsNeedingHydration.map(async (userId) => {
+const hydrateUsersByID = async (ids: string[]): Promise<Map<string, User>> => {
+  const lookup = new Map<string, User>();
+  if (ids.length === 0) return lookup;
+
+  const results = await Promise.all(
+    ids.map(async (userId) => {
       try {
         const res = await apiClient.get(`user/${userId}`);
         const user = userSchema.parse(res.data);
-        return user;
+        return { userId, user };
       } catch {
         return null;
       }
     }),
   );
 
-  const userLookup = new Map<string, User>();
-  hydratedUsers.forEach((user, index) => {
-    if (user) {
-      userLookup.set(idsNeedingHydration[index]!, user);
+  results.forEach((result) => {
+    if (result?.user) {
+      lookup.set(result.userId, result.user);
     }
   });
 
-  return payload.map((participant) => {
-    const fetchedUser = userLookup.get(participant.user_id);
-    const enrichedUser = fetchedUser
-      ? {
-          id: fetchedUser.id,
-          email: fetchedUser.email,
-          first_name: fetchedUser.firstName,
-          last_name: fetchedUser.lastName,
-        }
-      : participant.user;
-
-    return toChatParticipant({
-      ...participant,
-      user: enrichedUser,
-    });
-  });
+  return lookup;
 };
 
-const fetchMessages = async (chatroomId: string): Promise<ChatMessage[]> => {
-  const response = await apiClient.get(`chat/${chatroomId}/messages`);
-  const payload = messagesResponseSchema.parse(response.data);
-  const messages = payload.map((message) => chatMessageSchema.parse(message));
-  return messages.sort(
-    (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
+const toChatParticipantFromUser = (userId: string, user?: User): ChatParticipant => {
+  if (!user) return buildParticipantStub(userId);
+
+  const nameParts = [user.firstName?.trim() ?? "", user.lastName?.trim() ?? ""].filter(
+    Boolean,
   );
+  const displayName =
+    nameParts.length > 0
+      ? nameParts.join(" ")
+      : user.email?.trim().length
+      ? user.email
+      : userId;
+
+  return {
+    id: userId,
+    displayName,
+    username: user.email ?? userId,
+    avatarUrl: "",
+    isOnline: false,
+  };
+};
+
+export const fetchParticipants = async (
+  chatroomId: string,
+  participantIds?: string[],
+): Promise<ChatParticipant[]> => {
+  const ids = Array.from(new Set((participantIds ?? []).filter(Boolean)));
+
+  try {
+    const response = await apiClient.get(`chat/${chatroomId}/participants`);
+    const payload = participantsResponseSchema.parse(response.data);
+    const idsNeedingHydration = Array.from(
+      new Set(
+        payload
+          .filter((participant) => {
+            const user = participant.user;
+            const hasName =
+              !!user &&
+              ((typeof user.first_name === "string" && user.first_name.trim().length > 0) ||
+                (typeof user.last_name === "string" && user.last_name.trim().length > 0));
+            return !hasName;
+          })
+          .map((participant) => participant.user_id),
+      ),
+    );
+
+    const hydratedUsers = await hydrateUsersByID(idsNeedingHydration);
+
+    return payload.map((participant) => {
+      const fetchedUser = hydratedUsers.get(participant.user_id);
+      const enrichedUser = fetchedUser
+        ? {
+            id: fetchedUser.id,
+            email: fetchedUser.email,
+            first_name: fetchedUser.firstName,
+            last_name: fetchedUser.lastName,
+          }
+        : participant.user;
+
+      return toChatParticipant({
+        ...participant,
+        user: enrichedUser,
+      });
+    });
+  } catch {
+    if (ids.length === 0) return [];
+
+    const hydratedUsers = await hydrateUsersByID(ids);
+    return ids.map((userId) => toChatParticipantFromUser(userId, hydratedUsers.get(userId)));
+  }
+};
+
+export const fetchMessagesPage = async (
+  chatroomId: string,
+  page = 1,
+): Promise<ChatMessage[]> => {
+  const response = await apiClient.get(`chat/${chatroomId}/messages`, {
+    params: { page },
+  });
+  const payload = messagesResponseSchema.parse(response.data);
+  const parsed = payload.map((message) => chatMessageSchema.parse(message));
+  return parsed.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
 };
 
 const buildChatroom = (
@@ -301,7 +376,14 @@ const buildChatroom = (
   messages: ChatMessage[],
   extras: ChatroomExtras = {},
 ): Chatroom => {
-  const sortedMessages = [...messages].sort(
+  const candidateMessages =
+    messages.length > 0
+      ? messages
+      : extras.lastMessage
+      ? [extras.lastMessage]
+      : [];
+
+  const sortedMessages = [...candidateMessages].sort(
     (a, b) => a.sentAt.getTime() - b.sentAt.getTime(),
   );
   const latestMessageAt = sortedMessages.at(-1)?.sentAt;
@@ -313,9 +395,13 @@ const buildChatroom = (
 
   return {
     id: chatroomId,
-    isGroup: participants.length > 2,
+    readAll: extras.readAll,
+    isGroup: false,
     updatedAt,
-    unreadCount: extras.unreadCount ?? 0,
+    unreadCount:
+      extras.readAll === true
+        ? 0
+        : extras.unreadCount ?? 0,
     participants,
     messages: sortedMessages,
   };
@@ -325,10 +411,11 @@ const fetchChatroom = async (
   chatroomId: string,
   extras: ChatroomExtras = {},
 ): Promise<Chatroom> => {
+  const participantIds = extras.participants ? extras.participants.map((p) => p.id) : [];
   const participants =
-    extras.participants ?? (await fetchParticipants(chatroomId));
+    extras.participants ?? (await fetchParticipants(chatroomId, participantIds));
   const messages =
-    extras.messages ?? (await fetchMessages(chatroomId));
+    extras.messages ?? (await fetchMessagesPage(chatroomId, 1));
 
   return buildChatroom(chatroomId, participants, messages, extras);
 };
@@ -346,51 +433,19 @@ const getMessageResourceId = (value: string | number): string => {
 
 export const getChatrooms = (): ApiQueryOptions<Chatroom[]> => ({
   queryKey: ["chat", "chatrooms"],
-  queryFn: async () => {
-    const response = await apiClient.get("chat/rooms");
-    const data = response.data ?? null;
-    const dataRecord =
-      typeof data === "object" && data !== null
-        ? (data as Record<string, unknown>)
-        : undefined;
-    const rawRooms = Array.isArray(data)
-      ? data
-      : dataRecord && Array.isArray(dataRecord.rooms)
-      ? (dataRecord.rooms as unknown[])
-      : dataRecord && Array.isArray(dataRecord.data)
-      ? (dataRecord.data as unknown[])
-      : undefined;
-
-    if (!rawRooms) {
-      throw new Error("Expected chat rooms response to contain an array of rooms.");
-    }
-
-    const summaries = rawRooms.map(normalizeChatroomSummary);
-
-    const chatrooms = await Promise.all(
-      summaries.map(async (summary) => {
-        if (summary.participants && summary.messages) {
-          return buildChatroom(
-            summary.id,
-            summary.participants,
-            summary.messages,
-            summary,
-          );
-        }
-
-        return fetchChatroom(summary.id, summary);
-      }),
-    );
-
-    return chatrooms.sort(
-      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
-    );
-  },
+  // Data for this query is pushed via SSE from the chat page; we don't fetch here.
+  queryFn: async () => [],
+  staleTime: 30_000,
+  gcTime: 5 * 60 * 1000,
+  refetchOnWindowFocus: false,
 });
 
 export const getChatroom = (chatroomId: string): ApiQueryOptions<Chatroom> => ({
   queryKey: ["chat", "chatrooms", chatroomId],
   queryFn: async () => fetchChatroom(chatroomId),
+  staleTime: 15_000,
+  gcTime: 5 * 60 * 1000,
+  refetchOnWindowFocus: false,
 });
 
 export const createChatroom = async (
@@ -422,32 +477,44 @@ export const removeParticipant = async ({
   await apiClient.delete(`chat/${chatroomId}/participants/${userId}`);
 };
 
-export const sendMessage = async (
-  input: SendMessageInput,
-): Promise<ChatMessage> => {
-  const payload = sendMessageInputSchema.parse(input);
-
-  const response = await apiClient.post(`chat/${payload.chatroomId}/messages`, {
-    body: payload.body,
-  });
-  return chatMessageSchema.parse(response.data);
-};
-
-export const updateMessage = async ({
-  messageId,
-  body,
-}: UpdateMessageInput): Promise<ChatMessage> => {
-  const messageResourceId = getMessageResourceId(messageId);
-  const response = await apiClient.patch(`chat/messages/${messageResourceId}`, {
-    body,
-  });
-  return chatMessageSchema.parse(response.data);
-};
-
 export const deleteMessage = async (
   _chatroomId: string,
   messageId: string | number,
 ): Promise<void> => {
   const messageResourceId = getMessageResourceId(messageId);
   await apiClient.delete(`chat/messages/${messageResourceId}`);
+};
+
+const extractRoomsArray = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.rooms)) return record.rooms;
+    if (Array.isArray(record.data)) return record.data;
+  }
+  return [];
+};
+export const hydrateChatroomsFromPayload = async (
+  payload: unknown,
+): Promise<Chatroom[]> => {
+  const rawRooms = extractRoomsArray(payload);
+
+  if (!rawRooms || rawRooms.length === 0) {
+    return [];
+  }
+
+  const summaries = rawRooms.map(normalizeChatroomSummary);
+
+  const chatrooms = summaries.map((summary) =>
+    buildChatroom(
+      summary.id,
+      summary.participants ?? [],
+      summary.messages ?? [],
+      summary,
+    ),
+  );
+
+  return chatrooms.sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+  );
 };

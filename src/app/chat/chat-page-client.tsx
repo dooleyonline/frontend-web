@@ -21,17 +21,51 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
 import { API_BASE_URL } from "@/lib/env";
-import { ChatMessage, Chatroom, chatMessageSchema } from "@/lib/types";
+import { ChatMessage, ChatParticipant, Chatroom, chatMessageSchema } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   clearPendingChatMessage,
   loadPendingChatMessage,
 } from "@/lib/chat/pending-message";
+import {
+  CHAT_MESSAGES_PAGE_SIZE,
+  fetchMessagesPage,
+  fetchParticipants,
+} from "@/lib/api/chat";
 
 const CHATROOMS_QUERY_KEY = ["chat", "chatrooms"] as const;
 const ACCESS_DENIED_MESSAGE = "You do not have access to this conversation.";
 const CHATROOM_NOT_FOUND_MESSAGE = "Conversation not found.";
 const CHATROOM_ID_PREFIX = "room-";
+const participantNeedsHydration = (participant: ChatParticipant) => {
+  const display = participant.displayName?.trim() ?? "";
+  const username = participant.username?.trim() ?? "";
+  return !display || display === participant.id || display === username;
+};
+const isDuplicateMessage = (messages: ChatMessage[], candidate: ChatMessage) =>
+  messages.some((message) => {
+    if (message.id === candidate.id) return true;
+    if (message.senderId !== candidate.senderId) return false;
+    if (message.body !== candidate.body) return false;
+    const delta = Math.abs(message.sentAt.getTime() - candidate.sentAt.getTime());
+    return delta <= 2000;
+  });
+const mergeMessages = (existing: ChatMessage[], incoming: ChatMessage[]) => {
+  const merged = [...existing];
+  incoming.forEach((message) => {
+    if (!isDuplicateMessage(merged, message)) {
+      merged.push(message);
+    }
+  });
+  return merged.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+};
+const buildParticipantStub = (id: string): ChatParticipant => ({
+  id,
+  displayName: id,
+  username: id,
+  avatarUrl: "",
+  isOnline: false,
+});
 
 const removeTrailingSlash = (value: string) =>
   value.endsWith("/") ? value.slice(0, -1) : value;
@@ -41,7 +75,14 @@ const ensureWebSocketBaseUrl = () => {
     throw new Error("NEXT_PUBLIC_API_BASE_URL must be defined for chat WebSocket connection.");
   }
 
-  return removeTrailingSlash(API_BASE_URL);
+  const trimmed = removeTrailingSlash(API_BASE_URL);
+  if (trimmed.startsWith("https://")) {
+    return `wss://${trimmed.slice("https://".length)}`;
+  }
+  if (trimmed.startsWith("http://")) {
+    return `ws://${trimmed.slice("http://".length)}`;
+  }
+  return trimmed;
 };
 
 const WS_BASE_URL = ensureWebSocketBaseUrl();
@@ -74,32 +115,271 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   const [isParticipantsDialogOpen, setIsParticipantsDialogOpen] = useState(false);
   const [participantsDialogChatroom, setParticipantsDialogChatroom] =
     useState<Chatroom | null>(null);
+  const [paginationByRoom, setPaginationByRoom] = useState<
+    Record<string, { page: number; loading: boolean; exhausted: boolean; initialized: boolean }>
+  >({});
+  const [chatroomListReady, setChatroomListReady] = useState(false);
+  const participantsFetchInFlightRef = useRef<Set<string>>(new Set());
   const queryClient = useQueryClient();
   const invalidAccessToastShownRef = useRef(false);
   const meQuery = useQuery(api.auth.me());
   const currentUserId = meQuery.data?.id ?? null;
 
-  const chatroomsQueryOptions = api.chat.getChatrooms();
   const chatroomListQuery = useQuery({
-    ...chatroomsQueryOptions,
+    ...api.chat.getChatrooms(),
     enabled: Boolean(currentUserId),
   });
-  const allChatrooms = useMemo(
+  const mergeChatrooms = useCallback(
+    (existing: Chatroom[] | undefined, incoming: Chatroom[]): Chatroom[] => {
+      if (!existing || existing.length === 0) return incoming;
+      const existingMap = new Map(existing.map((room) => [room.id, room]));
+
+      const merged = incoming.map((room) => {
+        const prior = existingMap.get(room.id);
+        if (!prior) return room;
+
+        const messages = mergeMessages(prior.messages, room.messages);
+
+        return {
+          ...room,
+          participants:
+            prior.participants.length > 0 ? prior.participants : room.participants,
+          messages,
+        };
+      });
+
+      existing.forEach((room) => {
+        if (!merged.some((r) => r.id === room.id)) {
+          merged.push(room);
+        }
+      });
+
+      return merged.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    let cancelled = false;
+    let source: EventSource | null = null;
+    let retryDelay = 2000;
+
+    const connect = () => {
+      if (cancelled) return;
+      source?.close();
+
+      source = new EventSource(`${API_BASE_URL}/chat/rooms`, {
+        withCredentials: true,
+      });
+
+      source.addEventListener("rooms", (event) => {
+        const payload = (event as MessageEvent).data;
+        try {
+          const parsed = JSON.parse(payload);
+          void api.chat
+            .hydrateChatroomsFromPayload(parsed)
+            .then((rooms) => {
+              if (cancelled) return;
+              queryClient.setQueryData<Chatroom[] | undefined>(
+                CHATROOMS_QUERY_KEY,
+                (previous) => mergeChatrooms(previous, rooms),
+              );
+            })
+            .catch((error) => {
+              console.error("Failed to hydrate chat rooms from stream.", error);
+            });
+          retryDelay = 2000;
+        } catch (error) {
+          console.error("Failed to parse chat rooms stream payload.", error);
+        }
+      });
+
+      source.onerror = () => {
+        source?.close();
+        if (cancelled) return;
+        const delay = Math.min(retryDelay, 30000);
+        retryDelay = Math.min(retryDelay * 2, 30000);
+        window.setTimeout(connect, delay);
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      source?.close();
+    };
+  }, [currentUserId, queryClient, mergeChatrooms]);
+  const chatrooms = useMemo(
     () => chatroomListQuery.data ?? [],
     [chatroomListQuery.data],
   );
-  const chatrooms = useMemo(
-    () =>
-      currentUserId
-        ? allChatrooms.filter((chatroom) =>
-            chatroom.participants.some((participant) => participant.id === currentUserId),
-          )
-        : [],
-    [allChatrooms, currentUserId],
+  useEffect(() => {
+    if (chatrooms.length > 0) {
+      setChatroomListReady(true);
+    }
+  }, [chatrooms.length]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (chatroomListQuery.isLoading || chatroomListQuery.isFetching) return;
+    const timer = window.setTimeout(() => setChatroomListReady(true), 2000);
+    return () => window.clearTimeout(timer);
+  }, [chatroomListQuery.isLoading, chatroomListQuery.isFetching]);
+  useEffect(() => {
+    setPaginationByRoom((previous) => {
+      const next = { ...previous };
+      chatrooms.forEach((room) => {
+        if (next[room.id]) return;
+        next[room.id] = {
+          page: 1,
+          loading: false,
+          exhausted: room.messages.length < CHAT_MESSAGES_PAGE_SIZE,
+          initialized: room.messages.length >= CHAT_MESSAGES_PAGE_SIZE,
+        };
+      });
+      return next;
+    });
+  }, [chatrooms]);
+  const chatroomListFetched = Boolean(currentUserId && chatroomListQuery.data);
+  const chatroomListFetching = chatroomListQuery.isLoading || chatroomListQuery.isFetching;
+  const chatroomListLoading = !chatroomListReady;
+
+  const upsertChatroom = useCallback(
+    (incoming: Chatroom) => {
+      queryClient.setQueryData<Chatroom[] | undefined>(
+        CHATROOMS_QUERY_KEY,
+        (previous) => {
+          if (!previous || previous.length === 0) {
+            return [incoming];
+          }
+
+          const index = previous.findIndex((room) => room.id === incoming.id);
+          if (index === -1) {
+            return [...previous, incoming].sort(
+              (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
+            );
+          }
+
+          const existing = previous[index];
+
+          const mergedMessages = mergeMessages(existing.messages, incoming.messages);
+
+          const nextRoom: Chatroom = {
+            ...existing,
+            ...incoming,
+            participants:
+              incoming.participants.length > 0
+                ? incoming.participants
+                : existing.participants,
+            messages: mergedMessages,
+          };
+
+          const next = [...previous];
+          next[index] = nextRoom;
+          return next.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        },
+      );
+    },
+    [queryClient],
   );
-  const chatroomListFetched = chatroomListQuery.isFetched && Boolean(currentUserId);
-  const chatroomListFetching = chatroomListQuery.isFetching;
-  const refetchChatrooms = chatroomListQuery.refetch;
+
+  const hydrateChatroom = useCallback(
+    async (chatroomId: string, participantIds: string[] = []): Promise<Chatroom | null> => {
+      try {
+        const [participants, messages] = await Promise.all([
+          fetchParticipants(chatroomId, participantIds),
+          fetchMessagesPage(chatroomId, 1),
+        ]);
+        const latestMessageAt = messages.at(-1)?.sentAt ?? new Date();
+        return {
+          id: chatroomId,
+          readAll: true,
+          isGroup: participants.length > 2,
+          updatedAt: latestMessageAt,
+          unreadCount: 0,
+          participants,
+          messages,
+        };
+      } catch (error) {
+        console.error("Failed to hydrate chatroom", chatroomId, error);
+        return null;
+      }
+    },
+    [],
+  );
+
+  const markChatroomAsRead = useCallback(
+    (chatroomId: string | null) => {
+      if (!chatroomId) return;
+      queryClient.setQueryData<Chatroom[] | undefined>(
+        CHATROOMS_QUERY_KEY,
+        (previous) => {
+          if (!previous) return previous;
+          const index = previous.findIndex((room) => room.id === chatroomId);
+          if (index === -1) return previous;
+          const next = [...previous];
+          next[index] = {
+            ...previous[index],
+            unreadCount: 0,
+            readAll: true,
+          };
+          return next;
+        },
+      );
+    },
+    [queryClient],
+  );
+
+  const ensureRoomParticipants = useCallback(
+    async (chatroomId: string) => {
+      if (!chatroomId) return;
+      const rooms = queryClient.getQueryData<Chatroom[] | undefined>(CHATROOMS_QUERY_KEY);
+      const target = rooms?.find((room) => room.id === chatroomId);
+      const needsHydration =
+        !target ||
+        target.participants.length === 0 ||
+        target.participants.some(participantNeedsHydration);
+      if (!needsHydration) return;
+      const knownParticipantIds =
+        target?.participants?.map((participant) => participant.id).filter(Boolean) ?? [];
+
+      if (participantsFetchInFlightRef.current.has(chatroomId)) return;
+
+      participantsFetchInFlightRef.current.add(chatroomId);
+      try {
+        const participants = await api.chat.fetchParticipants(chatroomId, knownParticipantIds);
+        queryClient.setQueryData<Chatroom[] | undefined>(
+          CHATROOMS_QUERY_KEY,
+          (previous) => {
+            if (!previous) return previous;
+            const idx = previous.findIndex((room) => room.id === chatroomId);
+            if (idx === -1) return previous;
+            const nextRooms = [...previous];
+            nextRooms[idx] = { ...previous[idx], participants };
+            return nextRooms;
+          },
+        );
+      } catch (error) {
+        console.error("Failed to fetch participants", error);
+      } finally {
+        participantsFetchInFlightRef.current.delete(chatroomId);
+      }
+    },
+    [queryClient],
+  );
+  useEffect(() => {
+    if (!currentUserId) return;
+    chatrooms.forEach((room) => {
+      const needsParticipants =
+        room.participants.length === 0 ||
+        room.participants.some(participantNeedsHydration);
+      if (needsParticipants) {
+        void ensureRoomParticipants(room.id);
+      }
+    });
+  }, [chatrooms, currentUserId, ensureRoomParticipants]);
 
   const {
     mutateAsync: createChatroomAsync,
@@ -143,6 +423,101 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
   useEffect(() => {
     invalidAccessToastShownRef.current = false;
   }, [initialChatroomSlug]);
+
+  useEffect(() => {
+    if (!activeChatroomId) return;
+    markChatroomAsRead(activeChatroomId);
+  }, [activeChatroomId, markChatroomAsRead]);
+
+  useEffect(() => {
+    if (!activeChatroomId) return;
+    setPaginationByRoom((previous) => {
+      if (previous[activeChatroomId]) return previous;
+      return {
+        ...previous,
+        [activeChatroomId]: {
+          page: 1,
+          loading: false,
+          exhausted: false,
+          initialized: false,
+        },
+      };
+    });
+  }, [activeChatroomId]);
+
+  const ensureRoomMessages = useCallback(
+    async (chatroomId: string) => {
+      let shouldFetch = false;
+
+      setPaginationByRoom((previous) => {
+        const pagination = previous[chatroomId];
+        if (pagination?.loading || pagination?.initialized) {
+          return previous;
+        }
+
+        shouldFetch = true;
+        return {
+          ...previous,
+          [chatroomId]: {
+            page: pagination?.page ?? 1,
+            loading: true,
+            exhausted: pagination?.exhausted ?? false,
+            initialized: pagination?.initialized ?? false,
+          },
+        };
+      });
+
+      if (!shouldFetch) return;
+
+      try {
+        const messages = await fetchMessagesPage(chatroomId, 1);
+        setPaginationByRoom((previous) => ({
+          ...previous,
+          [chatroomId]: {
+            page: 1,
+            loading: false,
+            exhausted: messages.length < CHAT_MESSAGES_PAGE_SIZE,
+            initialized: true,
+          },
+        }));
+
+        if (messages.length === 0) return;
+
+        queryClient.setQueryData<Chatroom[] | undefined>(
+          CHATROOMS_QUERY_KEY,
+          (previous) => {
+            if (!previous) return previous;
+            const index = previous.findIndex((room) => room.id === chatroomId);
+            if (index === -1) return previous;
+            const target = previous[index];
+            const mergedMessages = mergeMessages(target.messages, messages);
+
+            const updated: Chatroom = {
+              ...target,
+              messages: mergedMessages,
+            };
+
+            const nextRooms = [...previous];
+            nextRooms[index] = updated;
+            return nextRooms;
+          },
+        );
+      } catch (error) {
+        console.error("Failed to fetch messages", error);
+        setPaginationByRoom((previous) => ({
+          ...previous,
+          [chatroomId]: {
+            page: previous[chatroomId]?.page ?? 1,
+            loading: false,
+            exhausted: previous[chatroomId]?.exhausted ?? false,
+            initialized: previous[chatroomId]?.initialized ?? false,
+          },
+        }));
+      }
+    },
+    [queryClient],
+  );
+  
   useEffect(() => {
     if (!chatroomListFetched || !currentUserId) {
       return;
@@ -163,7 +538,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
       return;
     }
 
-    const matchingChatroom = allChatrooms.find((chatroom) => {
+    const matchingChatroom = chatrooms.find((chatroom) => {
       const normalizedSlug = getChatroomSlug(chatroom.id);
       return (
         normalizedSlug === initialChatroomSlug || chatroom.id === initialChatroomSlug
@@ -192,28 +567,8 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
       return;
     }
 
-    const isParticipant = matchingChatroom.participants.some(
-      (participant) => participant.id === currentUserId,
-    );
-
-    if (!isParticipant) {
-      if (!invalidAccessToastShownRef.current) {
-        toast.error(ACCESS_DENIED_MESSAGE);
-        invalidAccessToastShownRef.current = true;
-      }
-      if (activeChatroomId !== null) {
-        setActiveChatroomId(null);
-      }
-      if (!showListOnMobile) {
-        setShowListOnMobile(true);
-      }
-      setMapDialogChatroom(null);
-      setIsMapDialogOpen(false);
-      if (pathname !== "/chat") {
-        router.replace("/chat");
-      }
-      return;
-    }
+    void ensureRoomParticipants(matchingChatroom.id);
+    void ensureRoomMessages(matchingChatroom.id);
 
     if (activeChatroomId !== matchingChatroom.id) {
       setActiveChatroomId(matchingChatroom.id);
@@ -229,10 +584,12 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     }
   }, [
     activeChatroomId,
-    allChatrooms,
+    chatrooms,
     chatroomListFetched,
     chatroomListFetching,
     currentUserId,
+    ensureRoomMessages,
+    ensureRoomParticipants,
     initialChatroomSlug,
     pathname,
     router,
@@ -268,7 +625,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
       }
 
       const target = previous[index];
-      if (target.messages.some((message) => message.id === parsed.id)) {
+      if (isDuplicateMessage(target.messages, parsed)) {
         return previous;
       }
 
@@ -291,7 +648,22 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     });
 
     if (!handled && chatroomListFetched) {
-      void refetchChatrooms();
+      void (async () => {
+        const hydrated = await hydrateChatroom(parsed.chatroomId);
+        if (!hydrated) return;
+
+        const nextUnread =
+          parsed.senderId === currentUserId || activeChatroomId === parsed.chatroomId
+            ? 0
+            : hydrated.unreadCount + 1;
+
+        upsertChatroom({
+          ...hydrated,
+          messages: [...hydrated.messages, parsed],
+          updatedAt: parsed.sentAt,
+          unreadCount: nextUnread,
+        });
+      })();
     }
   }, [
     lastMessage,
@@ -299,8 +671,10 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     currentUserId,
     activeChatroomId,
     chatroomListFetched,
-    refetchChatrooms,
+    hydrateChatroom,
+    upsertChatroom,
   ]);
+
 
   const handleCreateChatroom = useCallback(
     async (participantIds: string[]) => {
@@ -308,11 +682,67 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
         const uniqueParticipantIds = Array.from(
           new Set([currentUserId, ...participantIds]),
         ).filter(Boolean) as string[];
+
+        const targetIds = new Set(uniqueParticipantIds);
+
+        const findExistingRoom = async (): Promise<string | null> => {
+          for (const room of chatrooms) {
+            let candidate = room;
+            if (candidate.participants.length === 0) {
+              await ensureRoomParticipants(candidate.id);
+              const refreshed = queryClient.getQueryData<Chatroom[] | undefined>(
+                CHATROOMS_QUERY_KEY,
+              );
+              candidate = refreshed?.find((r) => r.id === room.id) ?? candidate;
+            }
+
+            const ids = new Set(candidate.participants.map((p) => p.id));
+            if (
+              ids.size === targetIds.size &&
+              Array.from(targetIds).every((id) => ids.has(id))
+            ) {
+              return candidate.id;
+            }
+          }
+          return null;
+        };
+
+        const existingRoomId = await findExistingRoom();
+        if (existingRoomId) {
+          setActiveChatroomId(existingRoomId);
+          setShowListOnMobile(false);
+          setIsMapDialogOpen(false);
+          setMapDialogChatroom(null);
+          const targetPath = `/chat/${getChatroomSlug(existingRoomId)}`;
+          if (pathname !== targetPath) {
+            router.push(targetPath);
+          }
+          toast.success("You already have a conversation with this person.");
+          return;
+        }
+
         const newChatroomId = await createChatroomAsync({
           participantIds: uniqueParticipantIds,
         });
-        await refetchChatrooms();
+        const participantStubs = uniqueParticipantIds.map(buildParticipantStub);
+        const hydrated = await hydrateChatroom(newChatroomId, uniqueParticipantIds);
+        if (hydrated) {
+          const filled = hydrated.participants.length > 0 ? hydrated.participants : participantStubs;
+          upsertChatroom({ ...hydrated, participants: filled });
+        } else {
+          upsertChatroom({
+            id: newChatroomId,
+            readAll: true,
+            isGroup: uniqueParticipantIds.length > 2,
+            updatedAt: new Date(),
+            unreadCount: 0,
+            participants: participantStubs,
+            messages: [],
+          });
+          void ensureRoomParticipants(newChatroomId);
+        }
         setActiveChatroomId(newChatroomId);
+        markChatroomAsRead(newChatroomId);
         setShowListOnMobile(false);
         setIsMapDialogOpen(false);
         setMapDialogChatroom(null);
@@ -333,9 +763,14 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     [
       createChatroomAsync,
       currentUserId,
-      refetchChatrooms,
+      chatrooms,
+      ensureRoomParticipants,
+      queryClient,
       router,
       pathname,
+      hydrateChatroom,
+      upsertChatroom,
+      markChatroomAsRead,
     ],
   );
 
@@ -354,7 +789,11 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
       return;
     }
 
+    void ensureRoomParticipants(chatroomId);
+    void ensureRoomMessages(chatroomId);
+
     setActiveChatroomId(chatroomId);
+    markChatroomAsRead(chatroomId);
     setShowListOnMobile(false);
     setIsMapDialogOpen(false);
     setMapDialogChatroom(null);
@@ -405,6 +844,77 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     ],
   );
 
+  const handleLoadMoreMessages = useCallback(
+    async (chatroomId: string) => {
+      if (!chatroomId) return;
+      const pagination = paginationByRoom[chatroomId];
+      if (pagination?.loading || pagination?.exhausted) return;
+
+      setPaginationByRoom((previous) => ({
+        ...previous,
+        [chatroomId]: {
+          page: previous[chatroomId]?.page ?? 1,
+          loading: true,
+          exhausted: previous[chatroomId]?.exhausted ?? false,
+          initialized: previous[chatroomId]?.initialized ?? false,
+        },
+      }));
+
+      const nextPage = (pagination?.page ?? 1) + 1;
+      try {
+        const olderMessages = await fetchMessagesPage(chatroomId, nextPage);
+
+        setPaginationByRoom((previous) => ({
+          ...previous,
+          [chatroomId]: {
+            page: nextPage,
+            loading: false,
+            exhausted: olderMessages.length < CHAT_MESSAGES_PAGE_SIZE,
+            initialized: true,
+          },
+        }));
+
+        if (olderMessages.length === 0) {
+          return;
+        }
+
+    queryClient.setQueryData<Chatroom[] | undefined>(
+      CHATROOMS_QUERY_KEY,
+      (previous) => {
+        if (!previous) return previous;
+        const index = previous.findIndex((room) => room.id === chatroomId);
+        if (index === -1) return previous;
+        const target = previous[index];
+
+        const mergedMessages = mergeMessages(target.messages, olderMessages);
+
+        const updated: Chatroom = {
+          ...target,
+          messages: mergedMessages,
+        };
+
+        const nextRooms = [...previous];
+        nextRooms[index] = updated;
+        return nextRooms;
+      },
+    );
+  } catch (error) {
+        console.error("Failed to load older messages", error);
+        setPaginationByRoom((previous) => ({
+          ...previous,
+          [chatroomId]: {
+            page: pagination?.page ?? 1,
+            loading: false,
+            exhausted: pagination?.exhausted ?? false,
+            initialized: pagination?.initialized ?? false,
+          },
+        }));
+        toast.error("Could not load older messages. Please try again.");
+      }
+    },
+    [paginationByRoom, queryClient],
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!activeChatroomId) return;
@@ -447,8 +957,6 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
           },
         );
 
-        void refetchChatrooms();
-
         const leftActiveChatroom = activeChatroomId === chatroomId;
         if (leftActiveChatroom) {
           setActiveChatroomId(null);
@@ -477,7 +985,6 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
       leaveChatroomAsync,
       pathname,
       queryClient,
-      refetchChatrooms,
       router,
     ],
   );
@@ -524,6 +1031,10 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
     ) {
       toast.error(ACCESS_DENIED_MESSAGE);
       return;
+    }
+
+    if (!chatroom.participants || chatroom.participants.length === 0) {
+      void ensureRoomParticipants(chatroom.id);
     }
 
     setParticipantsDialogChatroom(chatroom);
@@ -614,7 +1125,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
         onCreate={handleCreateChatroom}
       />
 
-      <main className="flex h-full flex-1 flex-col">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden h-[calc(100svh-3rem)]">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           <div
             className={cn(
@@ -628,11 +1139,12 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
               activeChatroomId={activeChatroomId}
               currentUserId={currentUserId}
               onSelect={handleChatroomSelect}
-              isLoading={chatroomListQuery.isLoading}
+              isLoading={chatroomListLoading}
               isError={chatroomListQuery.isError}
               onRetry={() => chatroomListQuery.refetch()}
               onStartNewChat={() => setIsCreateDialogOpen(true)}
               disableNewChat={isCreatingChatroom}
+              showEmptyState={chatroomListReady}
             />
           </div>
 
@@ -648,6 +1160,21 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
               currentUserId={currentUserId}
               sending={isSending}
               onSendMessage={handleSendMessage}
+              onLoadMore={
+                selectedChatroom
+                  ? () => handleLoadMoreMessages(selectedChatroom.id)
+                  : undefined
+              }
+              loadingMore={
+                selectedChatroom
+                  ? paginationByRoom[selectedChatroom.id]?.loading ?? false
+                  : false
+              }
+              hasMore={
+                selectedChatroom
+                  ? !(paginationByRoom[selectedChatroom.id]?.exhausted ?? false)
+                  : false
+              }
               onBack={handleBackToList}
               onOpenMap={handleOpenMapDialog}
               onLeaveChatroom={handleLeaveChatroom}
@@ -731,9 +1258,9 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
                 : 'Select a conversation before sharing a meetup spot.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 px-6 pb-6">
+          <div className="flex-1 px-6 pb-4 flex">
             <CampusMapWrapper
-              className="h-[53vh]"
+              className="h-full min-h-[520px]"
               onSelectSpot={mapDialogChatroom ? handleShareSpot : undefined}
             />
           </div>

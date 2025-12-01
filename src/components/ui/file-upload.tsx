@@ -286,7 +286,6 @@ export const FileUploaderItem = forwardRef<
   HTMLDivElement,
   { index: number } & React.HTMLAttributes<HTMLDivElement>
 >(({ className, index, children, ...props }, ref) => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { activeIndex } = useFileUpload();
   const isSelected = index === activeIndex;
   return (
@@ -347,8 +346,8 @@ export const FileInput = forwardRef<
       >
         {children}
       </div>
+      {/* react-dropzone manages the input ref internally; allow it during render here. */}
       <Input
-        ref={dropzoneState.inputRef}
         disabled={isLOF}
         {...dropzoneState.getInputProps()}
         className={`${isLOF ? "cursor-not-allowed" : ""}`}

@@ -202,6 +202,8 @@ export const ItemTable = ({ data }: ItemTableProps) => {
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 	const [rowSelection, setRowSelection] = useState({});
 
+	// React Compiler cannot safely memoize TanStack Table helpers; ignore compatibility warning.
+	// eslint-disable-next-line react-hooks/incompatible-library
 	const table = useReactTable({
 		data,
 		columns,

@@ -140,6 +140,14 @@ export function CampusMap({
     !isMapDataReady &&
     (zonesQuery.isLoading || meetupPlacesQuery.isLoading || accessiblePlacesQuery.isLoading);
 
+  const buildPopupHtml = (name: string, desc?: string) => {
+    const trimmed = desc?.trim();
+    const descBlock = trimmed
+      ? `<div style="margin-top:4px;color:#475569;font-size:12px;line-height:1.4;">${trimmed}</div>`
+      : '';
+    return `<div style="font-size:14px"><strong>${name}</strong>${descBlock}</div>`;
+  };
+
   function showToast(message: string) {
     setToast(message);
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
@@ -422,7 +430,7 @@ export function CampusMap({
 
           new maplibre.Popup({ offset: 8, closeOnMove: true })
             .setLngLat(coordinates)
-            .setHTML(`<div style="font-size:14px"><strong>${name}</strong><br/>${desc}</div>`)
+            .setHTML(buildPopupHtml(name, desc))
             .addTo(map);
         });
 
@@ -456,7 +464,7 @@ export function CampusMap({
 
           new maplibre.Popup({ offset: 8, closeOnMove: true })
             .setLngLat(coordinates)
-            .setHTML(`<div style="font-size:14px"><strong>${name}</strong><br/>${desc}</div>`)
+            .setHTML(buildPopupHtml(name, desc))
             .addTo(map);
         });
 

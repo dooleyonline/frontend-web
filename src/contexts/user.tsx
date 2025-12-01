@@ -17,7 +17,7 @@ export const UserProvider = ({ children }: PropsWithChildren) => {
 
 	const revalidate = useCallback(async () => {
 		await refetch();
-	}, []);
+	}, [refetch]);
 
 	return (
 		<UserContext.Provider

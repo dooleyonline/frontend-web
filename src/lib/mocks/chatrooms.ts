@@ -245,21 +245,6 @@ export const mockChatApi = {
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   },
 
-  updateMessage: async (chatroomId: string, messageId: string, body: string): Promise<ChatMessage> => {
-    const chatroom = ensureChatroom(chatroomId);
-    const target = chatroom.messages.find((message) => message.id === messageId);
-    if (!target) throw new Error("Message not found");
-    target.body = body;
-    target.edited = true;
-    target.sentAt = new Date();
-    chatroom.updatedAt = target.sentAt;
-    chatroomsStore = chatroomsStore
-      .filter((room) => room.id !== chatroom.id)
-      .concat(chatroom)
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    return { ...target };
-  },
-
   deleteMessage: async (chatroomId: string, messageId: string): Promise<void> => {
     const chatroom = ensureChatroom(chatroomId);
     chatroom.messages = chatroom.messages.filter((message) => message.id !== messageId);

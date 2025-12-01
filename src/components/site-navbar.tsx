@@ -17,23 +17,61 @@ import {
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { buildChatroomTitle } from "@/lib/chat/title";
 import { useIsMobile } from "@/hooks/ui";
 import { useUser } from "@/hooks/use-user";
 import { userFullname, userInitial } from "@/lib/utils";
 import cn from "@/lib/utils/cn";
 import slugToTitle from "@/lib/utils/slug-to-title";
+import { Chatroom } from "@/lib/types";
+import { useQueryClient } from "@tanstack/react-query";
 import { PlusIcon, UserIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, forwardRef } from "react";
+import { Fragment, forwardRef, useMemo } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
 
+const CHATROOM_ID_PREFIX = "room-";
+const getChatroomSlug = (chatroomId: string) => {
+  if (
+    chatroomId.startsWith(CHATROOM_ID_PREFIX) &&
+    chatroomId.length > CHATROOM_ID_PREFIX.length
+  ) {
+    return chatroomId.slice(CHATROOM_ID_PREFIX.length);
+  }
+  return chatroomId;
+};
+
 export function SiteNavbar() {
   const isMobile = useIsMobile();
-  const paths = usePathname().split("/").slice(1);
+  const pathname = usePathname();
+  const paths = useMemo(() => pathname.split("/").slice(1), [pathname]);
   const { user } = useUser();
+  const queryClient = useQueryClient();
+  const chatrooms = queryClient.getQueryData<Chatroom[] | undefined>([
+    "chat",
+    "chatrooms",
+  ]);
+
+  const chatroomBreadcrumbName = useMemo(() => {
+    if (!user?.id) return null;
+    if (paths[0] !== "chat" || paths.length < 2) return null;
+    const slug = paths[1];
+    const room = chatrooms?.find(
+      (room) =>
+        room.id === slug || getChatroomSlug(room.id) === slug,
+    );
+    if (!room) return null;
+    return buildChatroomTitle(room, user.id);
+  }, [chatrooms, paths, user]);
+
+  const lastSegment = paths[paths.length - 1] ?? "";
+  const lastLabel =
+    chatroomBreadcrumbName && paths[0] === "chat"
+      ? chatroomBreadcrumbName
+      : slugToTitle(lastSegment);
 
   const links = [
     {
@@ -66,7 +104,7 @@ export function SiteNavbar() {
               </Fragment>
             ))}
             <BreadcrumbItem>
-              <BreadcrumbPage>{slugToTitle(paths.slice(-1)[0])}</BreadcrumbPage>
+              <BreadcrumbPage>{lastLabel}</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>

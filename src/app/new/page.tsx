@@ -6,10 +6,10 @@ import { Form } from "@/components/ui/form";
 import { useUser } from "@/hooks/use-user";
 import api from "@/lib/api";
 import { serverQuery } from "@/lib/api/shared";
-import { ItemCreateSchema } from "@/lib/types";
+import { Item, ItemCreateSchema } from "@/lib/types";
 import { redirect, useRouter } from "next/navigation";
 import { MouseEventHandler, useEffect, useState } from "react";
-import { useForm, useFormState } from "react-hook-form";
+import { useForm, useFormState, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Step1 } from "./(form)/step-1";
@@ -36,6 +36,10 @@ const MarketplaceNew = () => {
       isNegotiable: false,
     },
     mode: "onChange",
+  });
+
+  const watchedValues = useWatch({
+    control: form.control,
   });
 
   const { isDirty } = useFormState({ control: form.control });
@@ -116,6 +120,23 @@ const MarketplaceNew = () => {
     },
   ];
 
+  const previewItem: Item = {
+    id: -1,
+    name: watchedValues.name ?? "",
+    description: watchedValues.description ?? "",
+    placeholder: null,
+    images: images?.map((img) => URL.createObjectURL(img as File)) ?? [],
+    price: watchedValues.price ?? 0,
+    condition: watchedValues.condition ?? 0,
+    isNegotiable: watchedValues.isNegotiable ?? false,
+    postedAt: new Date(),
+    soldAt: null,
+    views: 112,
+    category: watchedValues.category ?? "",
+    subcategory: watchedValues.subcategory ?? "",
+    seller: user?.id ?? null,
+  };
+
   return (
     <main className="flex gap-6 w-full h-full">
       {/* FORM */}
@@ -135,17 +156,7 @@ const MarketplaceNew = () => {
       {/* PREVIEW */}
       <div className="flex-1/3 hidden lg:block min-w-sm max-w-2xl p-6 border rounded-xl">
         <ItemModal
-          item={{
-            id: -1,
-            ...form.watch(),
-            postedAt: new Date(),
-            soldAt: null,
-            placeholder: null,
-            views: 112,
-            images:
-              images?.map((img) => URL.createObjectURL(img as File)) ?? [],
-            seller: user?.id ?? "",
-          }}
+          item={previewItem}
           isPreview
         />
       </div>
