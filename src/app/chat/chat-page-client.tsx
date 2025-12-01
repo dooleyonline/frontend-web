@@ -811,6 +811,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
           page: previous[chatroomId]?.page ?? 1,
           loading: true,
           exhausted: previous[chatroomId]?.exhausted ?? false,
+          initialized: previous[chatroomId]?.initialized ?? false,
         },
       }));
 
@@ -864,6 +865,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
             page: pagination?.page ?? 1,
             loading: false,
             exhausted: pagination?.exhausted ?? false,
+            initialized: pagination?.initialized ?? false,
           },
         }));
         toast.error("Could not load older messages. Please try again.");
