@@ -11,6 +11,7 @@ import {
 } from "@/lib/types";
 
 import { ApiQueryOptions, apiClient } from "./shared";
+import axios from "axios";
 
 const chatroomIdResponseSchema = z
   .union([
@@ -18,34 +19,6 @@ const chatroomIdResponseSchema = z
     z.object({ id: z.string() }),
   ])
   .transform((data) => (typeof data === "string" ? data : data.id));
-
-const participantResponseSchema = z
-  .object({
-    room_id: z.string(),
-    user_id: z.string(),
-    last_read_message_id: z
-      .union([
-        z.union([z.number(), z.string()]).nullable(),
-        z.object({
-          int64: z.union([z.number(), z.string()]).optional(),
-          valid: z.boolean(),
-        }),
-      ])
-      .optional(),
-    user: z
-      .object({
-        id: z.string(),
-        email: z.string().nullable().optional(),
-        first_name: z.string().nullable().optional(),
-        last_name: z.string().nullable().optional(),
-      })
-      .passthrough()
-      .optional(),
-  })
-  .passthrough();
-
-const participantsResponseSchema = z.array(participantResponseSchema);
-type ParticipantResponse = z.infer<typeof participantsResponseSchema>[number];
 
 const messageResponseSchema = z
   .object({
@@ -69,6 +42,7 @@ const chatRoomSummarySchema = z
     updated_at: z.string().optional(),
     unreadCount: z.number().int().nonnegative().optional(),
     unread_count: z.number().int().nonnegative().optional(),
+    message_count: z.number().int().nonnegative().optional(),
     last_message: z.unknown().optional(),
     read_all: z.boolean().optional(),
     participants: z.unknown().optional(),
@@ -81,6 +55,7 @@ type RestChatroomSummary = {
   updatedAt?: string;
   unreadCount?: number;
   readAll?: boolean;
+  messageCount?: number;
   lastMessage?: ChatMessage;
   participants?: ChatParticipant[];
   messages?: ChatMessage[];
@@ -90,6 +65,7 @@ type ChatroomExtras = {
   updatedAt?: string | Date;
   unreadCount?: number;
   readAll?: boolean;
+  messageCount?: number;
   lastMessage?: ChatMessage;
   participants?: ChatParticipant[];
   messages?: ChatMessage[];
@@ -112,29 +88,6 @@ const buildParticipantStub = (id: string): ChatParticipant => ({
   isOnline: false,
 });
 
-const toChatParticipant = (
-  participant: ParticipantResponse,
-): ChatParticipant => {
-  const user = participant.user;
-  const nameParts = [
-    user?.first_name?.trim() ?? "",
-    user?.last_name?.trim() ?? "",
-  ].filter(Boolean);
-
-  const displayName =
-    nameParts.length > 0
-      ? nameParts.join(" ")
-      : user?.email?.trim() ?? participant.user_id;
-
-  return {
-    id: participant.user_id,
-    displayName,
-    username: user?.email ?? participant.user_id,
-    avatarUrl: "",
-    isOnline: false,
-  };
-};
-
 const parseSummaryParticipants = (
   payload: unknown,
 ): ChatParticipant[] | undefined => {
@@ -147,12 +100,7 @@ const parseSummaryParticipants = (
   try {
     return z.array(chatParticipantSchema).parse(payload);
   } catch {
-    try {
-      const parsed = participantsResponseSchema.parse(payload);
-      return parsed.map(toChatParticipant);
-    } catch {
-      return undefined;
-    }
+    return undefined;
   }
 };
 
@@ -244,6 +192,7 @@ const normalizeChatroomSummary = (item: unknown): RestChatroomSummary => {
     id,
     updatedAt: parsed.updatedAt ?? parsed.updated_at,
     unreadCount: parsed.unreadCount ?? parsed.unread_count,
+    messageCount: parsed.message_count,
     participants: parseSummaryParticipants(parsed.participants),
     messages,
     lastMessage,
@@ -303,58 +252,23 @@ const toChatParticipantFromUser = (userId: string, user?: User): ChatParticipant
     id: userId,
     displayName,
     username: user.email ?? userId,
-    avatarUrl: "",
+    avatarUrl: user.avatar ?? "",
     isOnline: false,
   };
 };
 
 export const fetchParticipants = async (
-  chatroomId: string,
+  _chatroomId: string,
   participantIds?: string[],
 ): Promise<ChatParticipant[]> => {
   const ids = Array.from(new Set((participantIds ?? []).filter(Boolean)));
+  if (ids.length === 0) return [];
 
   try {
-    const response = await apiClient.get(`chat/${chatroomId}/participants`);
-    const payload = participantsResponseSchema.parse(response.data);
-    const idsNeedingHydration = Array.from(
-      new Set(
-        payload
-          .filter((participant) => {
-            const user = participant.user;
-            const hasName =
-              !!user &&
-              ((typeof user.first_name === "string" && user.first_name.trim().length > 0) ||
-                (typeof user.last_name === "string" && user.last_name.trim().length > 0));
-            return !hasName;
-          })
-          .map((participant) => participant.user_id),
-      ),
-    );
-
-    const hydratedUsers = await hydrateUsersByID(idsNeedingHydration);
-
-    return payload.map((participant) => {
-      const fetchedUser = hydratedUsers.get(participant.user_id);
-      const enrichedUser = fetchedUser
-        ? {
-            id: fetchedUser.id,
-            email: fetchedUser.email,
-            first_name: fetchedUser.firstName,
-            last_name: fetchedUser.lastName,
-          }
-        : participant.user;
-
-      return toChatParticipant({
-        ...participant,
-        user: enrichedUser,
-      });
-    });
-  } catch {
-    if (ids.length === 0) return [];
-
     const hydratedUsers = await hydrateUsersByID(ids);
     return ids.map((userId) => toChatParticipantFromUser(userId, hydratedUsers.get(userId)));
+  } catch {
+    return ids.map(buildParticipantStub);
   }
 };
 
@@ -362,12 +276,26 @@ export const fetchMessagesPage = async (
   chatroomId: string,
   page = 1,
 ): Promise<ChatMessage[]> => {
-  const response = await apiClient.get(`chat/${chatroomId}/messages`, {
-    params: { page },
-  });
-  const payload = messagesResponseSchema.parse(response.data);
-  const parsed = payload.map((message) => chatMessageSchema.parse(message));
-  return parsed.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+  try {
+    const response = await apiClient.get(`chat/${chatroomId}/messages`, {
+      params: { page },
+    });
+    const payload = messagesResponseSchema.parse(response.data);
+    const parsed = payload.map((message) => chatMessageSchema.parse(message));
+    return parsed.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
+  } catch (error) {
+    const status =
+      axios.isAxiosError(error) && error.response
+        ? error.response.status
+        : undefined;
+    const wrapped = new Error(
+      status === 400
+        ? "You do not have access to this conversation."
+        : "Failed to load messages.",
+    ) as Error & { status?: number };
+    wrapped.status = status;
+    throw wrapped;
+  }
 };
 
 const buildChatroom = (
@@ -404,6 +332,7 @@ const buildChatroom = (
         : extras.unreadCount ?? 0,
     participants,
     messages: sortedMessages,
+    messageCount: extras.messageCount,
   };
 };
 
@@ -461,13 +390,9 @@ export const deleteChatroom = async (chatroomId: string): Promise<void> => {
   await apiClient.delete(`chat/${chatroomId}`);
 };
 
-export const addParticipant = async ({
-  chatroomId,
-  userId,
-}: ChatroomParticipantInput): Promise<Chatroom> => {
-  await apiClient.post(`chat/${chatroomId}/participants/${userId}`);
-
-  return fetchChatroom(chatroomId);
+export const addParticipant = async (): Promise<Chatroom> => {
+  // Not supported by current backend; surface a clear error.
+  throw new Error("Adding participants is not supported by the chat service.");
 };
 
 export const removeParticipant = async ({

@@ -74,6 +74,8 @@ const chatRoomJsonSchema = z.object({
   participants: z.array(z.union([z.string(), chatParticipantSchema])),
   messages: z.array(chatMessageJsonSchema),
   readAll: z.boolean().optional(),
+  messageCount: z.number().int().nonnegative().optional(),
+  message_count: z.number().int().nonnegative().optional(),
 });
 
 export const chatRoomSchema = chatRoomJsonSchema.transform((data) => {
@@ -98,6 +100,7 @@ export const chatRoomSchema = chatRoomJsonSchema.transform((data) => {
   const messages = data.messages.map((message) =>
     chatMessageSchema.parse(message)
   );
+  const messageCount = data.messageCount ?? data.message_count;
 
   return {
     id: data.id,
@@ -107,6 +110,7 @@ export const chatRoomSchema = chatRoomJsonSchema.transform((data) => {
     unreadCount: data.unreadCount,
     participants,
     messages,
+    ...(messageCount === undefined ? {} : { messageCount }),
   };
 });
 
