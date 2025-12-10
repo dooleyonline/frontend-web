@@ -35,7 +35,7 @@ const RootLayout = ({
       <body className={`${fontVariables} font-sans antialiased h-svh`}>
         <Providers>
           <Sidebar variant="inset" />
-          <SidebarInset className="@container">
+          <SidebarInset className="@container overflow-hidden">
             <SiteNavbar />
             <Toaster />
             {children}
