@@ -40,6 +40,7 @@ substitutions:
   _NEXT_PUBLIC_BASE_URL: "https://dooleyonline.net"
   _NEXT_PUBLIC_API_BASE_URL: "https://api.dooleyonline.net"
   _NEXT_PUBLIC_STORAGE_URL: "https://brbqduswpnlcafksjsjo.supabase.co/storage/v1/object/public"
+  _NEXT_PUBLIC_GOOGLE_MAPS_STATIC_API_KEY: "AIzaSyB3wVqPV6z6nw68IC50QVUhbghW7d3B_hY"
 
 options:
   logging: CLOUD_LOGGING_ONLY
