@@ -1274,7 +1274,7 @@ const ChatPageClient = ({ initialChatroomSlug = null }: ChatPageClientProps) => 
         onCreate={handleCreateChatroom}
       />
 
-     <main className="flex flex-1 flex-col overflow-hidden p-0">
+      <main className="flex flex-1 flex-col overflow-hidden p-0">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           <div
             className={cn(
